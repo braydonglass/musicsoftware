@@ -29,6 +29,10 @@ MINOR_VOCABULARY = [
 ]
 
 
+# What a writer types where the engine may choose the note itself.
+HOLE = "_"
+
+
 def vocabulary_for(key: Key) -> list[str]:
     return MAJOR_VOCABULARY if key.mode == "major" else MINOR_VOCABULARY
 
@@ -69,8 +73,15 @@ def _function_of(spec: ChordSpec) -> str:
     return "other"
 
 
-def parse_soprano(text: str) -> list[Pitch]:
+def parse_soprano(text: str) -> list[Pitch | None]:
+    """Pitches, with ``_`` standing for a note the engine may choose.
+
+    A hole is not a rest. The chord under it is realized as usual and all
+    four voices sound; only the soprano is left free. This is what lets a
+    melody be pinned in part, so adding a chord to a progression does not
+    throw away the tune already chosen for the chords before it.
+    """
     tokens = text.split()
     if not tokens:
         raise ValueError("the melody is empty")
-    return [Pitch.parse(token) for token in tokens]
+    return [None if token == HOLE else Pitch.parse(token) for token in tokens]

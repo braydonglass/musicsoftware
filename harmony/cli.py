@@ -164,6 +164,9 @@ def cmd_chords(args) -> int:
     profile = Profile.load(args.profile)
     melody = parse_soprano(args.soprano)
     for index, note in enumerate(melody):
+        if note is None:
+            print(f"  {index + 1}. _        the engine chooses this note")
+            continue
         options = candidates_for(note, key, profile)
         print(f"  {index + 1}. {note}")
         if not options:

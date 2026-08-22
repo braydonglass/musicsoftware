@@ -59,10 +59,16 @@ def realize(
 ) -> list[Realization]:
     if not specs:
         raise ValueError("the progression is empty")
-    if soprano is not None and len(soprano) != len(specs):
+    if soprano is not None and len(soprano) > len(specs):
         raise ValueError(
             f"the melody has {len(soprano)} notes against {len(specs)} chords"
         )
+    if soprano is not None:
+        # A melody may be pinned in part. A ``None`` leaves that chord's
+        # soprano to the search, and a melody shorter than the progression
+        # leaves the chords past its end free - which is what happens when a
+        # chord is added to a progression whose tune is already chosen.
+        soprano = list(soprano) + [None] * (len(specs) - len(soprano))
 
     columns: list[list[tuple[Voicing, float, ChordSpec]]] = []
     for index, spec in enumerate(specs):
