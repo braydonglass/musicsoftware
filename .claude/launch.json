@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "harmony",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": ["-m", "harmony.web.server", "8765"],
+      "port": 8765
+    }
+  ]
+}

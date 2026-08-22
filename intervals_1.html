@@ -1,0 +1,724 @@
+<title>Intervals</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+
+<style>
+  :root {
+    --panel-deep: #171D24;
+    --panel-edge: #2E3845;
+    --recess:     #10151A;
+    --amber:      #F2A65A;
+    --amber-dim:  #8A6236;
+    --cyan:       #7FD4CB;
+    --cyan-dim:   #3F6E69;
+    --ink:        #94A3B4;
+    --ink-faint:  #4C5A6B;
+    --paper-ink:  #E8EDF2;
+    --mono: "DM Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+
+  * { box-sizing: border-box; }
+
+  .rig {
+    font-family: var(--mono);
+    background: var(--panel-deep);
+    background-image: linear-gradient(180deg, rgba(255,255,255,.028), rgba(0,0,0,.18));
+    border: 1px solid var(--panel-edge);
+    border-radius: 6px;
+    padding: 18px;
+    width: max-content;
+    margin: 0 auto;
+    color: var(--ink);
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  .bar { display: flex; justify-content: flex-end; gap: 6px; margin-bottom: 16px; }
+  .btn {
+    font-family: var(--mono); font-size: 10px; letter-spacing: .12em;
+    text-transform: uppercase; color: var(--ink-faint);
+    background: var(--recess); border: 1px solid var(--panel-edge);
+    border-radius: 3px; padding: 7px 11px; cursor: pointer;
+    transition: color .15s, border-color .15s, background .15s;
+  }
+  .btn:hover:not(:disabled) { color: var(--ink); }
+  .btn[aria-pressed="true"] { color: var(--amber); border-color: var(--amber-dim); background: #1C1811; }
+  .btn:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
+  .btn:disabled { opacity: .32; cursor: default; }
+  .btn-sound { margin-right: auto; }
+  .btn-sound[aria-pressed="true"] { color: var(--cyan); border-color: var(--cyan-dim); background: #111A19; }
+
+  .stage { display: flex; align-items: flex-start; gap: 18px; }
+
+  .paper {
+    box-sizing: content-box;
+    background: var(--recess); border: 1px solid var(--panel-edge);
+    border-radius: 3px; cursor: ns-resize; touch-action: none;
+    flex: none; display: block;
+  }
+  .paper:focus-visible { outline: 2px solid var(--cyan); outline-offset: 3px; }
+
+  .staff-line { stroke: var(--ink-faint); stroke-width: 1.4; opacity: .55; }
+  .clef       { fill: var(--ink); opacity: .8; }
+  .ledger     { stroke: var(--amber-dim); stroke-width: 1.8; }
+  .acc        { fill: var(--amber); }
+  .head-fill  { fill: var(--amber); }
+  .head-open  { fill: var(--recess); stroke: var(--amber); stroke-width: 2.6; }
+
+  /* ---- readout ---- */
+  .read { width: 200px; padding-top: 4px; }
+  .tier-generic  { font-size: 17px; color: var(--cyan); }
+  .tier-specific { font-size: 17px; color: var(--amber); margin-top: 2px; }
+  .tier-quality  { font-size: 21px; color: var(--paper-ink); margin-top: 20px; line-height: 1.2; }
+  .tier-abbr     { font-size: 17px; color: var(--paper-ink); opacity: .62; margin-top: 3px; }
+  .tier-ratio    { font-size: 12px; color: var(--ink-faint); margin-top: 18px; }
+  .tier-compound { font-size: 12px; color: var(--ink-faint); margin-top: 6px; line-height: 1.5; }
+
+  .flips { display: flex; gap: 6px; margin-top: 26px; }
+  .flips .btn { text-transform: none; letter-spacing: .04em; font-size: 11px; }
+
+  .scope-wrap {
+    background: var(--recess); border: 1px solid var(--panel-edge);
+    border-radius: 3px; overflow: hidden; margin-top: 16px;
+  }
+  .scope { display: block; width: 100%; height: 74px; }
+
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<div class="rig">
+
+  <div class="bar">
+    <button class="btn btn-sound" id="power" aria-pressed="false">Sound off</button>
+    <button class="btn" id="tuneEt"   aria-pressed="true">Equal</button>
+    <button class="btn" id="tuneJust" aria-pressed="false">Just</button>
+  </div>
+
+  <div class="stage">
+    <svg class="paper" id="paper" role="img" aria-label="Two pitches on a treble staff">
+      <g id="staffLayer"></g>
+      <g id="noteLayer"></g>
+    </svg>
+
+    <div class="read">
+      <div class="tier-generic"  id="tGeneric">fifth</div>
+      <div class="tier-specific" id="tSpecific">7 semitones</div>
+      <div class="tier-quality"  id="tQuality">Perfect fifth</div>
+      <div class="tier-abbr"     id="tAbbr">P5</div>
+      <div class="tier-ratio"    id="tRatio">3.00 : 2.00</div>
+      <div class="tier-compound" id="tCompound"></div>
+
+      <div class="flips">
+        <button class="btn" id="flipA">&#9679; respell</button>
+        <button class="btn" id="flipB">&#9675; respell</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="scope-wrap"><canvas class="scope" id="scope"></canvas></div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  /* =================================================================
+     LAYER 1 - pitch and interval primitives.
+
+     A direct port of the engine spec. Nothing below this block touches
+     the DOM, so the whole layer is testable on its own; runTests() at
+     the bottom runs the spec's corpus and is exposed on window.
+
+     The one porting hazard worth naming: Python's % and // floor toward
+     negative infinity and JavaScript's do not. Every place the spec
+     relies on that behaviour uses fmod/fdiv here, never % or /.
+     ================================================================= */
+
+  var LETTER_SEMITONES = [0, 2, 4, 5, 7, 9, 11];
+  var LETTER_NAMES     = ["C", "D", "E", "F", "G", "A", "B"];
+
+  function fmod(n, d) { return ((n % d) + d) % d; }
+  function fdiv(n, d) { return Math.floor(n / d); }
+
+  function Pitch(letter, octave, alteration) {
+    return { letter: letter, octave: octave, alteration: alteration };
+  }
+  function dia(p)  { return p.letter + 7 * p.octave; }
+  function midi(p) { return LETTER_SEMITONES[p.letter] + p.alteration + 12 * (p.octave + 1); }
+  function samePitch(a, b) {
+    return a.letter === b.letter && a.octave === b.octave && a.alteration === b.alteration;
+  }
+
+  function pitchName(p) {
+    return LETTER_NAMES[p.letter] +
+      (p.alteration > 0 ? Array(p.alteration + 1).join("#")
+                        : Array(-p.alteration + 1).join("b")) + p.octave;
+  }
+
+  function Interval(generic, specific) { return { generic: generic, specific: specific }; }
+  function sameInterval(a, b) { return a.generic === b.generic && a.specific === b.specific; }
+
+  var REFERENCE = { 1: 0, 2: 2, 3: 4, 4: 5, 5: 7, 6: 9, 7: 11, 8: 12 };
+  var PERFECT   = { 1: true, 4: true, 5: true, 8: true };
+
+  var QUAL_PERFECT = { "-2": "doubly diminished", "-1": "diminished", "0": "perfect",
+                       "1": "augmented", "2": "doubly augmented" };
+  var QUAL_MAJOR   = { "-3": "doubly diminished", "-2": "diminished", "-1": "minor",
+                       "0": "major", "1": "augmented", "2": "doubly augmented" };
+  var ABBR = { "doubly diminished": "dd", "diminished": "d", "minor": "m",
+               "perfect": "P", "major": "M", "augmented": "A", "doubly augmented": "AA" };
+
+  function UnspellableInterval(msg) { this.name = "UnspellableInterval"; this.message = msg; }
+  UnspellableInterval.prototype = Object.create(Error.prototype);
+
+  /* 3.4 */
+  function simplify(iv) {
+    var g = iv.generic, s = iv.specific, octaves = 0;
+    while (g > 8) { g -= 7; s -= 12; octaves += 1; }
+    return { interval: Interval(g, s), octaves: octaves };
+  }
+
+  function quality(iv) {
+    var r = simplify(iv);
+    var dev = r.interval.specific - REFERENCE[r.interval.generic];
+    var q = (PERFECT[r.interval.generic] ? QUAL_PERFECT : QUAL_MAJOR)[String(dev)];
+    if (!q) throw new Error("unsupported quality: generic " + iv.generic +
+                            ", " + iv.specific + " semitones");
+    return q;
+  }
+  function shorthand(iv) { return ABBR[quality(iv)] + simplify(iv).interval.generic; }
+
+  /* 3.1 - measured low to high. The tiebreak on diatonic_index is what
+     makes the diminished second detectable at all. */
+  function intervalBetween(a, b) {
+    var lo = a, hi = b;
+    if (midi(a) > midi(b) || (midi(a) === midi(b) && dia(a) > dia(b))) { lo = b; hi = a; }
+    return Interval(dia(hi) - dia(lo) + 1, midi(hi) - midi(lo));
+  }
+
+  /* 3.2 - the letter comes from the GENERIC size, then the alteration is
+     whatever reaches the SPECIFIC size. That order is the whole reason an
+     augmented fourth above C4 returns F#4 and never Gb4. */
+  function pitchAtInterval(p, iv, direction) {
+    var sign = direction === "up" ? 1 : -1;
+    var td = dia(p) + sign * (iv.generic - 1);
+    var letter = fmod(td, 7), octave = fdiv(td, 7);
+    var alteration = (midi(p) + sign * iv.specific) - (LETTER_SEMITONES[letter] + 12 * (octave + 1));
+    if (Math.abs(alteration) > 2)
+      throw new UnspellableInterval("would need alteration " + alteration);
+    return Pitch(letter, octave, alteration);
+  }
+
+  /* 3.3 */
+  function invert(iv) {
+    if (iv.generic > 8) throw new Error("invert() takes simple intervals; simplify() first");
+    return Interval(9 - iv.generic, 12 - iv.specific);
+  }
+
+  /* 3.5 */
+  function enharmonics(p, maxAlt) {
+    if (maxAlt === undefined) maxAlt = 2;
+    var out = [];
+    for (var off = -1; off <= 1; off++) {
+      var td = dia(p) + off;
+      var letter = fmod(td, 7), octave = fdiv(td, 7);
+      var alteration = midi(p) - (LETTER_SEMITONES[letter] + 12 * (octave + 1));
+      if (Math.abs(alteration) <= maxAlt) out.push(Pitch(letter, octave, alteration));
+    }
+    return out;
+  }
+
+  /* 3.6 - A4 and d5 carry different just ratios. That divergence is the
+     strongest argument the module makes for storing pitch spelled. */
+  var JUST = { "P1": [1,1],  "m2": [16,15], "M2": [9,8],  "m3": [6,5],
+               "M3": [5,4],  "P4": [4,3],   "A4": [45,32],"d5": [64,45],
+               "P5": [3,2],  "m6": [8,5],   "M6": [5,3],  "m7": [16,9],
+               "M7": [15,8], "P8": [2,1] };
+
+  function ratio(a, b, tuning) {
+    var iv = intervalBetween(a, b);
+    if (tuning !== "just") return Math.pow(2, iv.specific / 12);
+    var r = simplify(iv), j = JUST[shorthand(iv)];
+    if (!j) return Math.pow(2, iv.specific / 12);      // exotic quality, no 5-limit entry
+    return (j[0] / j[1]) * Math.pow(2, r.octaves);
+  }
+  function cents(a, b, tuning) { return 1200 * Math.log(ratio(a, b, tuning)) / Math.LN2; }
+
+  function freqOf(p, tuning, reference) {
+    var base = 440 * Math.pow(2, (midi(reference) - 69) / 12);
+    if (tuning !== "just" || samePitch(p, reference)) {
+      return 440 * Math.pow(2, (midi(p) - 69) / 12);
+    }
+    return base * ratio(reference, p, "just");
+  }
+
+  /* =================================================================
+     Test corpus, section 4 of the spec.
+     ================================================================= */
+
+  function runTests() {
+    var pass = 0, fail = [];
+    function ok(label, cond) { if (cond) pass++; else fail.push(label); }
+    function raises(label, fn) {
+      try { fn(); fail.push(label + " (did not raise)"); }
+      catch (e) { pass++; }
+    }
+    var C4 = Pitch(0,4,0), D4 = Pitch(1,4,0), E4 = Pitch(2,4,0), G4 = Pitch(4,4,0),
+        A4 = Pitch(5,4,0), B3 = Pitch(6,3,0), G3 = Pitch(4,3,0), F3 = Pitch(3,3,0),
+        Fs4 = Pitch(3,4,1), Gb4 = Pitch(4,4,-1), Cs4 = Pitch(0,4,1), Db4 = Pitch(1,4,-1),
+        Ab3 = Pitch(5,3,-1);
+
+    /* 4.1 */
+    ok("4.1 C4 midi",       midi(C4) === 60);
+    ok("4.1 A4 midi",       midi(A4) === 69);
+    ok("4.1 F#4 = Gb4",     midi(Fs4) === midi(Gb4));
+    ok("4.1 spelling差",     dia(Fs4) !== dia(Gb4));
+    ok("4.1 B3 midi",       midi(B3) === 59);
+    ok("4.1 C#4 / Db4",     midi(Cs4) === 61 && midi(Db4) === 61 && dia(Cs4) !== dia(Db4));
+
+    /* 4.2 inclusive count */
+    ok("4.2 C4-G4 fifth",   sameInterval(intervalBetween(C4,G4), Interval(5,7)));
+    ok("4.2 unison",        sameInterval(intervalBetween(C4,C4), Interval(1,0)));
+    ok("4.2 C4-D4",         sameInterval(intervalBetween(C4,D4), Interval(2,2)));
+
+    /* 4.3 same sound, different interval */
+    ok("4.3 A4",            sameInterval(intervalBetween(C4,Fs4), Interval(4,6)));
+    ok("4.3 d5",            sameInterval(intervalBetween(C4,Gb4), Interval(5,6)));
+
+    /* 4.4 diminished second */
+    ok("4.4 dim 2nd",       sameInterval(intervalBetween(Cs4,Db4), Interval(2,0)));
+    ok("4.4 minor 2nd",     sameInterval(intervalBetween(C4,Db4), Interval(2,1)));
+
+    /* 4.5 augmented unison */
+    ok("4.5 aug unison",    sameInterval(intervalBetween(C4,Cs4), Interval(1,1)));
+
+    /* 4.6 spelling under construction */
+    ok("4.6 A4 up -> F#4",  samePitch(pitchAtInterval(C4, Interval(4,6), "up"), Fs4));
+    ok("4.6 d5 up -> Gb4",  samePitch(pitchAtInterval(C4, Interval(5,6), "up"), Gb4));
+    ok("4.6 M3 down -> Ab3",samePitch(pitchAtInterval(C4, Interval(3,4), "down"), Ab3));
+
+    /* 4.7 octave seam */
+    ok("4.7 B3-C4",         sameInterval(intervalBetween(B3,C4), Interval(2,1)));
+    ok("4.7 B3 +m2 -> C4",  samePitch(pitchAtInterval(B3, Interval(2,1), "up"), C4));
+
+    /* 4.8 descending */
+    ok("4.8 C4-G3",         sameInterval(intervalBetween(C4,G3), Interval(4,5)));
+    ok("4.8 P5 down -> F3", samePitch(pitchAtInterval(C4, Interval(5,7), "down"), F3));
+
+    /* 4.9 inversion */
+    ok("4.9 A4 -> d5",      sameInterval(invert(Interval(4,6)), Interval(5,6)));
+    ok("4.9 M3 -> m6",      sameInterval(invert(Interval(3,4)), Interval(6,8)));
+    ok("4.9 P1 -> P8",      sameInterval(invert(Interval(1,0)), Interval(8,12)));
+
+    /* 4.10 compound */
+    var s9 = simplify(Interval(9,14)), s8 = simplify(Interval(8,12));
+    ok("4.10 M9 -> M2+8va", sameInterval(s9.interval, Interval(2,2)) && s9.octaves === 1);
+    ok("4.10 P8 stays",     sameInterval(s8.interval, Interval(8,12)) && s8.octaves === 0);
+
+    /* 4.11 unspellable. NOTE: the spec's own example, Interval(2,3) above
+       C#4, resolves to D-double-sharp - alteration +2, which the data model
+       permits - so it does NOT raise. Interval(2,4) is the case that yields
+       the triple sharp the spec's prose describes. Both are asserted. */
+    ok("4.11 (2,3) is legal dd", samePitch(pitchAtInterval(Cs4, Interval(2,3), "up"), Pitch(1,4,2)));
+    raises("4.11 (2,4) raises", function () { pitchAtInterval(Cs4, Interval(2,4), "up"); });
+
+    /* 4.12 ratios */
+    ok("4.12 ET fifth",     Math.abs(ratio(C4,G4,"et")   - 1.4983) < 0.001);
+    ok("4.12 just fifth",   Math.abs(ratio(C4,G4,"just") - 1.5)    < 0.0001);
+    ok("4.12 A4 != d5",     ratio(C4,Fs4,"just") !== ratio(C4,Gb4,"just"));
+    ok("4.12 ET M3 cents",  Math.abs(cents(C4,E4,"et")   - 400)    < 0.01);
+    ok("4.12 just M3 cents",Math.abs(cents(C4,E4,"just") - 386.31) < 0.01);
+
+    return { passed: pass, failed: fail.length, failures: fail };
+  }
+
+  /* =================================================================
+     LAYER 2 - the page.
+     ================================================================= */
+
+  /* Glyph outlines from Apple Symbols (proprietary - swap for Bravura before
+     distributing). Authored in staff-space units, origin on the line each one
+     names: the clef on G4, the sharp and natural on their crossing, and the
+     flat on the centre of its bowl rather than its glyph box. */
+  var G_CLEF_D = "M0 -0.018Q0 -0.3378 0.0968 -0.6059Q0.1937 -0.8739 0.3581 -1.1036Q0.5225 -1.3333 0.7432 -1.536Q0.964 -1.7387 1.2162 -1.9369Q1.1622 -2.2387 1.1577 -2.5856Q1.1577 -3.1802 1.3378 -3.545Q1.518 -3.9234 1.8288 -3.9234Q2.045 -3.9234 2.1779 -3.6824Q2.3108 -3.4414 2.3108 -2.982Q2.3108 -2.3964 2.0135 -1.9865Q1.9099 -1.8468 1.7793 -1.7072Q1.6486 -1.5676 1.482 -1.4279Q1.5541 -1.0856 1.6171 -0.6982Q2.036 -0.6982 2.2973 -0.4369Q2.5631 -0.1712 2.5631 0.2613Q2.5631 0.6081 2.3941 0.8559Q2.2252 1.1036 1.9414 1.2207Q1.973 1.4324 1.9887 1.6194Q2.0045 1.8063 2.0045 1.9775Q2.0045 2.4279 1.795 2.6306Q1.5856 2.8333 1.2432 2.8333Q0.9099 2.8333 0.7117 2.6396Q0.5135 2.4414 0.5135 2.2117Q0.509 2.009 0.6239 1.8784Q0.7387 1.7477 0.9279 1.7477Q1.1171 1.7477 1.2207 1.8649Q1.3243 1.982 1.3243 2.1532Q1.3243 2.2477 1.2883 2.3221Q1.2523 2.3964 1.1892 2.4437Q1.1261 2.491 1.045 2.5068Q0.964 2.5225 0.8694 2.5Q0.9865 2.6712 1.2523 2.6712Q1.5495 2.6712 1.7005 2.4955Q1.8514 2.3198 1.8514 1.982Q1.8514 1.8243 1.8356 1.6486Q1.8198 1.473 1.7928 1.2703Q1.6351 1.3108 1.4595 1.3108Q1.1441 1.3108 0.8784 1.2252Q0.6126 1.1396 0.4167 0.9707Q0.2207 0.8018 0.1104 0.5541Q0 0.3063 0 -0.018ZM1.6667 0.482Q1.6171 0.1486 1.5586 -0.1757Q1.3514 -0.1757 1.214 -0.0495Q1.0766 0.0766 1.0766 0.2928Q1.0766 0.4324 1.1464 0.5405Q1.2162 0.6486 1.3423 0.7117Q1.3243 0.7613 1.3108 0.7973Q1.1081 0.7432 0.9595 0.5721Q0.8108 0.4009 0.8108 0.0991Q0.8108 -0.2297 1.045 -0.464Q1.2252 -0.6351 1.4685 -0.6847Q1.3829 -1.1306 1.3423 -1.3153Q1.1577 -1.1667 0.9842 -1.0068Q0.8108 -0.8468 0.6757 -0.6712Q0.5405 -0.4955 0.4595 -0.2973Q0.3784 -0.0991 0.3784 0.1306Q0.3784 0.3874 0.464 0.5743Q0.5495 0.7613 0.7005 0.8829Q0.8514 1.0045 1.0541 1.0631Q1.2568 1.1216 1.491 1.1216Q1.6396 1.1216 1.7613 1.0856Q1.7117 0.7883 1.6667 0.482ZM1.3829 -2.0495Q1.7342 -2.3063 1.8941 -2.5518Q2.0541 -2.7973 2.0541 -3.0586Q2.0541 -3.1847 1.9955 -3.2793Q1.9369 -3.3739 1.8243 -3.3739Q1.6126 -3.3739 1.4865 -3.0721Q1.3604 -2.7793 1.3604 -2.3514Q1.3604 -2.2117 1.3829 -2.0495ZM2.2568 0.4054Q2.2568 0.2793 2.2095 0.1712Q2.1622 0.0631 2.0856 -0.0135Q2.009 -0.0901 1.9099 -0.1329Q1.8108 -0.1757 1.7072 -0.1757Q1.7523 0.036 1.8018 0.3514Q1.8468 0.6396 1.9009 1.027Q2.0946 0.9234 2.1757 0.7477Q2.2568 0.5721 2.2568 0.4054Z";
+  var SHARP_D = "M0.7037 -0.9993V-0.598L0.8597 -0.678L0.8583 -0.4963L0.7037 -0.4163L0.7064 0.1356L0.8597 0.0583V0.2441L0.7051 0.3227L0.7078 0.7146H0.6305L0.6292 0.362L0.2305 0.5627L0.2332 0.9966L0.16 0.998L0.1586 0.5993L0.0014 0.678V0.4936L0.16 0.4122L0.1573 -0.1397L0 -0.0597V-0.2427L0.1573 -0.3227L0.1559 -0.72H0.2305L0.2319 -0.362L0.6292 -0.5573L0.6278 -1.002ZM0.6292 -0.3756 0.2305 -0.1749 0.2332 0.3756 0.6292 0.1763Z";
+  var FLAT_D = "M0 -1.4468H0.0786V-0.3037Q0.1763 -0.4041 0.2529 -0.4522Q0.3295 -0.5003 0.3783 -0.5003Q0.4353 -0.5003 0.482 -0.4793Q0.5288 -0.4583 0.5641 -0.4197Q0.5993 -0.381 0.6183 -0.3295Q0.6373 -0.278 0.6373 -0.2169Q0.6373 -0.1776 0.6142 -0.1322Q0.5912 -0.0868 0.5586 -0.0414Q0.5261 0.0041 0.4895 0.0441Q0.4529 0.0841 0.4244 0.1125L0.0095 0.5031ZM0.0827 0.3756Q0.1315 0.3119 0.1871 0.238Q0.2427 0.1641 0.2888 0.0841Q0.3349 0.0041 0.3654 -0.0814Q0.3959 -0.1668 0.3959 -0.2522Q0.3959 -0.3078 0.3661 -0.3417Q0.3363 -0.3756 0.2861 -0.3756Q0.2441 -0.3756 0.1986 -0.3532Q0.1532 -0.3308 0.1247 -0.2997L0.0786 -0.2414Z";
+  var NATURAL_D = "M0.0664 -0.9898V-0.3634L0.5166 -0.5912L0.5139 1.0047H0.4515L0.4502 0.3715L0 0.598V-0.9871ZM0.4502 -0.3675 0.0664 -0.1722V0.3661L0.4515 0.1722Z";
+
+
+  var STEP  = 12,           // pixels per diatonic step
+      SPACE = STEP * 2,
+      PAD   = 26;
+
+  /* Treble staff only. Diatonic indices: C4 = 28, C6 = 42. */
+  /* D_TOP is C6, the highest note; D_BOT is 27 because respelling C4
+     downward yields B#3, which sits a space below the C4 ledger. */
+  var D_TOP = 42, D_BOT = 27;
+  var MIDI_LOW = 60, MIDI_HIGH = 84;                // where the notes may travel
+  var TREBLE_LINES = [30, 32, 34, 36, 38];          // E4 G4 B4 D5 F5
+  var G_LINE = 32;
+  var LEDGER_ABOVE = [40, 42], LEDGER_BELOW = [28];
+
+  var G_CLEF_VOID = 0.166, G_CLEF_SCALE = 0.92, G_CLEF_LIFT = 0.194;
+
+  var H = (D_TOP - D_BOT) * STEP + PAD * 2;
+  var W = 240, STAFF_X0 = 10, STAFF_X1 = 220, NOTE_X = 150;
+
+  function stepToY(d) { return PAD + (D_TOP - d) * STEP; }
+
+  /* pitch A is the filled notehead, B the hollow one; identity survives crossing */
+  var pA = Pitch(0, 4, 0);        // C4
+  var pB = Pitch(4, 4, 0);        // G4
+  var tuning = "et", soundOn = false;
+
+  var paper  = document.getElementById("paper"),
+      staffL = document.getElementById("staffLayer"),
+      noteL  = document.getElementById("noteLayer"),
+      scope  = document.getElementById("scope"),
+      c2d    = scope.getContext("2d");
+
+  var SVGNS = "http://www.w3.org/2000/svg";
+  function el(tag, attrs) {
+    var n = document.createElementNS(SVGNS, tag);
+    for (var k in attrs) n.setAttribute(k, attrs[k]);
+    return n;
+  }
+  function line(x1, y1, x2, y2, cls) {
+    return el("line", { x1: x1, y1: y1, x2: x2, y2: y2, "class": cls });
+  }
+  function glyph(d, x, y, k, cls) {
+    return el("path", { "class": cls, d: d,
+      transform: "translate(" + x + "," + y + ") scale(" + SPACE * (k || 1) + ")" });
+  }
+
+  paper.setAttribute("width", W);
+  paper.setAttribute("height", H);
+  paper.setAttribute("viewBox", "0 0 " + W + " " + H);
+
+  function drawStaff() {
+    TREBLE_LINES.forEach(function (d) {
+      staffL.appendChild(line(STAFF_X0, stepToY(d), STAFF_X1, stepToY(d), "staff-line"));
+    });
+    staffL.appendChild(glyph(G_CLEF_D, 24,
+      stepToY(G_LINE) - (G_CLEF_LIFT + G_CLEF_VOID * G_CLEF_SCALE) * SPACE,
+      G_CLEF_SCALE, "clef"));
+  }
+
+  function ledgersFor(d) {
+    var out = [];
+    LEDGER_ABOVE.forEach(function (l) { if (d >= l) out.push(l); });
+    LEDGER_BELOW.forEach(function (l) { if (d <= l) out.push(l); });
+    return out;
+  }
+
+  /* NATURAL_D is unused while there is no key signature - nothing here can
+     require cancelling a previous accidental - but it is kept anchored and
+     ready for the module that introduces one. */
+  function accidentalGlyph(alt) {
+    return alt === 0 ? NATURAL_D : (alt > 0 ? SHARP_D : FLAT_D);
+  }
+
+  function drawNotes() {
+    while (noteL.firstChild) noteL.removeChild(noteL.firstChild);
+
+    var dA = dia(pA), dB = dia(pB);
+    /* seconds and unisons collide, so the higher notehead steps right -
+       standard engraving, and it also satisfies the spec's rule that both
+       handles stay visible when they land on the same pitch */
+    var close = Math.abs(dA - dB) <= 1;
+    var xA = NOTE_X, xB = NOTE_X;
+    if (close) { if (dA > dB) xA += 26; else xB += 26; }
+
+    var seen = {};
+    [[pA, xA, "head-fill"], [pB, xB, "head-open"]].forEach(function (n) {
+      var p = n[0], x = n[1], d = dia(p);
+      ledgersFor(d).forEach(function (l) {
+        if (seen[l]) return;
+        seen[l] = 1;
+        noteL.appendChild(line(NOTE_X - 24, stepToY(l), NOTE_X + 46, stepToY(l), "ledger"));
+      });
+    });
+
+    [[pA, xA, "head-fill", dA, dB], [pB, xB, "head-open", dB, dA]].forEach(function (n) {
+      var p = n[0], x = n[1], cls = n[2], y = stepToY(dia(p));
+
+      /* accidentals sit left of the notehead; when the two are close the
+         lower one is pushed further out so they do not overlap */
+      if (p.alteration !== 0) {
+        var back = (close || Math.abs(n[3] - n[4]) <= 2) && n[3] < n[4] ? 54 : 30;
+        noteL.appendChild(glyph(accidentalGlyph(p.alteration), NOTE_X - back, y, 1, "acc"));
+      }
+      noteL.appendChild(el("ellipse", {
+        "class": cls, cx: x, cy: y, rx: 14.5, ry: 10.5,
+        transform: "rotate(-21 " + x + " " + y + ")"
+      }));
+    });
+  }
+
+  /* ---------------- readout ---------------- */
+
+  var ORDINAL = ["", "unison", "second", "third", "fourth", "fifth", "sixth",
+                 "seventh", "octave", "ninth", "tenth", "eleventh", "twelfth",
+                 "thirteenth", "fourteenth", "fifteenth"];
+
+  function gcd(a, b) { return b ? gcd(b, a % b) : a; }
+
+  function nameOfInterval(iv) {
+    return ORDINAL[iv.generic] || (iv.generic + "th");
+  }
+
+  function render() {
+    drawNotes();
+
+    var iv = intervalBetween(pA, pB);
+    var q  = quality(iv), r = simplify(iv);
+
+    document.getElementById("tGeneric").textContent  = nameOfInterval(iv);
+    document.getElementById("tSpecific").textContent =
+      iv.specific + (iv.specific === 1 ? " semitone" : " semitones");
+
+    var full = q.charAt(0).toUpperCase() + q.slice(1) + " " + nameOfInterval(iv);
+    if (iv.generic === 1 && iv.specific === 0) full = "Perfect unison";
+    document.getElementById("tQuality").textContent = full;
+    document.getElementById("tAbbr").textContent = ABBR[q] + iv.generic;
+
+    var rr = ratio(pA, pB, tuning), ratioText;
+    if (tuning === "just" && JUST[shorthand(iv)]) {
+      var n = JUST[shorthand(iv)][0] * Math.pow(2, r.octaves), dnm = JUST[shorthand(iv)][1];
+      var g = gcd(n, dnm);
+      ratioText = (n / g) + " : " + (dnm / g);
+    } else {
+      ratioText = rr.toFixed(4) + " : 1";
+    }
+    document.getElementById("tRatio").textContent =
+      ratioText + "  ·  " + Math.round(cents(pA, pB, tuning)) + "¢";
+
+    document.getElementById("tCompound").textContent = r.octaves
+      ? nameOfInterval(iv) + " — " + quality(r.interval) + " " +
+        nameOfInterval(r.interval) + " plus " +
+        (r.octaves === 1 ? "an octave" : r.octaves + " octaves")
+      : "";
+
+    /* the flip control is live only where enharmonic ambiguity actually
+       exists - that absence is itself the lesson */
+    [["flipA", pA], ["flipB", pB]].forEach(function (f) {
+      document.getElementById(f[0]).disabled = enharmonics(f[1], 1).length < 2;
+    });
+
+    updateAudio();
+    drawScope();
+  }
+
+  /* ---------------- choosing a spelling while dragging ---------------- */
+
+  /* Prefer the plainest spelling; when two are equally plain (F# vs Gb)
+     take the one that agrees with the direction of travel. */
+  function spellFor(m, ascending) {
+    var cands = [];
+    for (var letter = 0; letter < 7; letter++) {
+      for (var oct = 2; oct <= 7; oct++) {
+        var alt = m - (LETTER_SEMITONES[letter] + 12 * (oct + 1));
+        if (Math.abs(alt) <= 1) cands.push(Pitch(letter, oct, alt));
+      }
+    }
+    cands.sort(function (a, b) {
+      var da = Math.abs(a.alteration), db = Math.abs(b.alteration);
+      if (da !== db) return da - db;
+      return ascending ? b.alteration - a.alteration : a.alteration - b.alteration;
+    });
+    return cands[0];
+  }
+
+  /* ---------------- audio ---------------- */
+
+  var audio = null, master = null, voices = null;
+
+  function ensureAudio() {
+    if (audio) return;
+    var AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return;
+    audio = new AC();
+    master = audio.createGain();
+    master.gain.value = 1;
+    master.connect(audio.destination);
+    voices = [0, 1].map(function () {
+      var g = audio.createGain(); g.gain.value = 0.10; g.connect(master);
+      var o = audio.createOscillator(); o.type = "triangle"; o.connect(g); o.start();
+      return { osc: o, gain: g };
+    });
+  }
+
+  function currentFreqs() {
+    /* in just intonation the lower pitch is the reference and the upper is
+       tuned against it; when they cross, the reference swaps */
+    var lo = pA, hi = pB;
+    if (midi(pA) > midi(pB) || (midi(pA) === midi(pB) && dia(pA) > dia(pB))) { lo = pB; hi = pA; }
+    var fLo = 440 * Math.pow(2, (midi(lo) - 69) / 12);
+    var fHi = tuning === "just" ? fLo * ratio(lo, hi, "just")
+                                : 440 * Math.pow(2, (midi(hi) - 69) / 12);
+    return (lo === pA) ? [fLo, fHi] : [fHi, fLo];
+  }
+
+  function updateAudio() {
+    if (!audio || !voices) return;
+    var f = currentFreqs(), t = audio.currentTime;
+    voices[0].osc.frequency.setTargetAtTime(f[0], t, 0.012);
+    voices[1].osc.frequency.setTargetAtTime(f[1], t, 0.012);
+  }
+
+  function setSound(on) {
+    soundOn = on;
+    var b = document.getElementById("power");
+    b.setAttribute("aria-pressed", String(on));
+    b.textContent = on ? "Sound on" : "Sound off";
+    if (!on) { if (master && audio) master.gain.setTargetAtTime(0, audio.currentTime, 0.02); return; }
+    ensureAudio();
+    if (!audio) return;
+    if (audio.state === "suspended") audio.resume();
+    updateAudio();
+    master.gain.setTargetAtTime(1, audio.currentTime, 0.02);
+    tick();
+  }
+
+  /* ---------------- summed waveform ---------------- */
+
+  var phase = 0, raf = null;
+
+  function drawScope() {
+    var dpr = window.devicePixelRatio || 1,
+        w = scope.clientWidth, h = scope.clientHeight;
+    if (!w || !h) return;
+    scope.width = w * dpr; scope.height = h * dpr;
+    c2d.setTransform(dpr, 0, 0, dpr, 0, 0);
+    c2d.clearRect(0, 0, w, h);
+
+    var f = currentFreqs(), lo = Math.min(f[0], f[1]);
+    var window_s = 4 / lo;                    // four periods of the lower pitch
+
+    c2d.strokeStyle = "#2E3845"; c2d.lineWidth = 1;
+    c2d.beginPath(); c2d.moveTo(0, h / 2); c2d.lineTo(w, h / 2); c2d.stroke();
+
+    var amp = h * 0.21, steps = Math.max(w * 2, 700);
+    c2d.strokeStyle = "#F2A65A"; c2d.lineWidth = 1.5; c2d.lineJoin = "round";
+    c2d.beginPath();
+    for (var i = 0; i <= steps; i++) {
+      var t = phase + (i / steps) * window_s;
+      var y = h / 2 - (Math.sin(2 * Math.PI * f[0] * t) + Math.sin(2 * Math.PI * f[1] * t)) * amp;
+      if (i === 0) c2d.moveTo((i / steps) * w, y); else c2d.lineTo((i / steps) * w, y);
+    }
+    c2d.stroke();
+  }
+
+  /* A just interval locks into a shape that repeats exactly; an equal
+     tempered one drifts, which is the same fact the ear hears as beating. */
+  function tick() {
+    if (!soundOn) { raf = null; return; }
+    phase = (audio ? audio.currentTime : 0);
+    drawScope();
+    raf = requestAnimationFrame(tick);
+  }
+
+  /* ---------------- interaction ---------------- */
+
+  function nearestHandle(y) {
+    return Math.abs(y - stepToY(dia(pA))) <= Math.abs(y - stepToY(dia(pB))) ? "A" : "B";
+  }
+
+  var dragging = null;
+
+  /* Dragging resolves to half staff positions. A whole position is the
+     natural note living there; a half position is the chromatic note
+     between - but only where one actually exists. E-F and B-C are already
+     a semitone apart, so nothing sits between them and the drag snaps to
+     the nearer letter.
+
+     The obvious shortcut - scaling diatonic steps into semitones by 12/7 -
+     is wrong precisely because those two steps are half the size of the
+     other five, and it lands every E and every B a semitone flat. */
+  function pitchFromY(y, ascending) {
+    var half = Math.round((D_TOP - (y - PAD) / STEP) * 2) / 2;
+    var d = Math.floor(half), between = half !== d;
+
+    var letter = fmod(d, 7), octave = fdiv(d, 7);
+    var natural = LETTER_SEMITONES[letter] + 12 * (octave + 1);
+    var upLetter = fmod(d + 1, 7), upOctave = fdiv(d + 1, 7);
+    var upNatural = LETTER_SEMITONES[upLetter] + 12 * (upOctave + 1);
+
+    var p;
+    if (!between || upNatural - natural < 2) p = Pitch(letter, octave, 0);
+    else p = ascending ? Pitch(letter, octave, 1) : Pitch(upLetter, upOctave, -1);
+
+    if (midi(p) < MIDI_LOW)  return spellFor(MIDI_LOW, ascending);
+    if (midi(p) > MIDI_HIGH) return spellFor(MIDI_HIGH, ascending);
+    return p;
+  }
+
+  paper.addEventListener("pointerdown", function (e) {
+    var r = paper.getBoundingClientRect();
+    dragging = nearestHandle(e.clientY - r.top);
+    paper.setPointerCapture(e.pointerId);
+    paper.focus();
+    if (!soundOn) setSound(true);
+    moveTo(e);
+    e.preventDefault();
+  });
+  paper.addEventListener("pointermove", function (e) { if (dragging) moveTo(e); });
+  function endDrag(e) {
+    if (!dragging) return;
+    dragging = null;
+    try { paper.releasePointerCapture(e.pointerId); } catch (err) {}
+  }
+  paper.addEventListener("pointerup", endDrag);
+  paper.addEventListener("pointercancel", endDrag);
+
+  function moveTo(e) {
+    var r = paper.getBoundingClientRect();
+    var y = e.clientY - r.top;
+    var cur = dragging === "A" ? pA : pB;
+    /* direction is taken against where the note currently sits, which stays
+       stable once the accidental appears and the notehead stops moving */
+    var next = pitchFromY(y, y < stepToY(dia(cur)));
+    if (samePitch(next, cur)) return;
+    if (dragging === "A") pA = next; else pB = next;
+    render();
+  }
+
+  document.getElementById("flipA").addEventListener("click", function () {
+    pA = nextSpelling(pA); render();
+  });
+  document.getElementById("flipB").addEventListener("click", function () {
+    pB = nextSpelling(pB); render();
+  });
+  function nextSpelling(p) {
+    var opts = enharmonics(p, 1);
+    for (var i = 0; i < opts.length; i++) if (samePitch(opts[i], p))
+      return opts[(i + 1) % opts.length];
+    return opts[0] || p;
+  }
+
+  document.getElementById("power").addEventListener("click", function () { setSound(!soundOn); });
+  [["tuneEt", "et"], ["tuneJust", "just"]].forEach(function (t) {
+    document.getElementById(t[0]).addEventListener("click", function () {
+      tuning = t[1];
+      document.getElementById("tuneEt").setAttribute("aria-pressed", String(tuning === "et"));
+      document.getElementById("tuneJust").setAttribute("aria-pressed", String(tuning === "just"));
+      render();
+    });
+  });
+  window.addEventListener("resize", drawScope);
+
+  drawStaff();
+  render();
+
+  window.engine = { Pitch: Pitch, Interval: Interval, midi: midi, dia: dia,
+                    intervalBetween: intervalBetween, pitchAtInterval: pitchAtInterval,
+                    invert: invert, simplify: simplify, enharmonics: enharmonics,
+                    ratio: ratio, cents: cents, quality: quality, shorthand: shorthand,
+                    pitchName: pitchName,
+                    runTests: runTests,
+                    setPitches: function (a, b) { pA = a; pB = b; render(); },
+                    get: function () { return { a: pA, b: pB }; } };
+})();
+</script>

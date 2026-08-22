@@ -1,0 +1,831 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Four-Part Harmony</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+
+<style>
+  :root {
+    --panel-deep: #171D24;
+    --panel-edge: #2E3845;
+    --recess:     #10151A;
+    --amber:      #F2A65A;
+    --amber-dim:  #8A6236;
+    --cyan:       #7FD4CB;
+    --cyan-dim:   #3F6E69;
+    --ink:        #94A3B4;
+    --ink-faint:  #4C5A6B;
+    --paper-ink:  #E8EDF2;
+    --red:        #E2705F;
+    /* One colour per voice. Four parts at absolute pitch on one grand staff
+       cannot be told apart by stem direction alone - the tenor sits right
+       under the alto around middle C and the two read as one chord. */
+    --v-soprano: #F2A65A;
+    --v-alto:    #E58C86;
+    --v-tenor:   #7FD4CB;
+    --v-bass:    #9C93DB;
+    --mono: "DM Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    font-family: var(--mono); background: #0C1014; color: var(--ink);
+    display: flex; justify-content: center; padding: 20px;
+  }
+
+  .rig {
+    background: var(--panel-deep);
+    background-image: linear-gradient(180deg, rgba(255,255,255,.028), rgba(0,0,0,.18));
+    border: 1px solid var(--panel-edge); border-radius: 6px;
+    padding: 18px; width: 100%; max-width: 980px;
+    display: flex; flex-direction: column; gap: 14px;
+  }
+
+  /* ---- score on top ---- */
+  .score-wrap {
+    background: var(--recess); border: 1px solid var(--panel-edge);
+    border-radius: 3px; overflow-x: auto; overflow-y: hidden; min-height: 330px;
+    display: flex; align-items: center;
+  }
+  .score { display: block; }
+
+  .staff-line { stroke: var(--ink-faint); stroke-width: 1.3; opacity: .55; }
+  .barline    { stroke: var(--ink-faint); stroke-width: 1.3; opacity: .55; }
+  .barline-end{ stroke: var(--ink-faint); stroke-width: 3;   opacity: .7; }
+  .clef       { fill: var(--ink); opacity: .8; }
+  .ledger     { stroke: var(--amber-dim); stroke-width: 1.6; }
+  .head       { fill: var(--amber); }
+  .stem       { stroke: var(--amber); stroke-width: 2.2; stroke-linecap: round; }
+  .acc        { fill: var(--amber); }
+
+  .v-soprano .head, .v-soprano .acc { fill: var(--v-soprano); }
+  .v-soprano .stem                  { stroke: var(--v-soprano); }
+  .v-alto    .head, .v-alto .acc    { fill: var(--v-alto); }
+  .v-alto    .stem                  { stroke: var(--v-alto); }
+  .v-tenor   .head, .v-tenor .acc   { fill: var(--v-tenor); }
+  .v-tenor   .stem                  { stroke: var(--v-tenor); }
+  .v-bass    .head, .v-bass .acc    { fill: var(--v-bass); }
+  .v-bass    .stem                  { stroke: var(--v-bass); }
+
+  .legend { display: flex; gap: 14px; font-size: 11px; flex-wrap: wrap; }
+  .legend span { display: flex; align-items: center; gap: 5px; }
+  .legend i {
+    width: 9px; height: 9px; border-radius: 50%; display: inline-block;
+  }
+  .build { margin-left: auto; color: var(--ink-faint); font-size: 10px; }
+  .numeral    { fill: var(--cyan); font-family: var(--mono); font-size: 14px;
+                text-anchor: middle; }
+  .beat       { fill: var(--ink-faint); font-family: var(--mono); font-size: 10px;
+                text-anchor: middle; }
+  .col-hit    { fill: transparent; }
+  .col-hit.on { fill: rgba(242,166,90,.09); }
+
+  /* ---- controls at the bottom ---- */
+  .controls { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; }
+  .field { display: flex; flex-direction: column; gap: 5px; }
+  .field label {
+    font-size: 9px; letter-spacing: .14em; text-transform: uppercase;
+    color: var(--ink-faint);
+  }
+  input, select {
+    font-family: var(--mono); font-size: 13px; color: var(--paper-ink);
+    background: var(--recess); border: 1px solid var(--panel-edge);
+    border-radius: 3px; padding: 8px 10px;
+  }
+  input:focus, select:focus { outline: 2px solid var(--cyan); outline-offset: 1px; }
+  .grow { flex: 1 1 260px; }
+  .grow input { width: 100%; }
+
+  button {
+    font-family: var(--mono); font-size: 10px; letter-spacing: .12em;
+    text-transform: uppercase; color: var(--ink-faint);
+    background: var(--recess); border: 1px solid var(--panel-edge);
+    border-radius: 3px; padding: 9px 13px; cursor: pointer;
+    transition: color .15s, border-color .15s, background .15s;
+  }
+  button:hover:not(:disabled) { color: var(--ink); }
+  button:disabled { opacity: .35; cursor: default; }
+  button.primary { color: var(--amber); border-color: var(--amber-dim); background: #1C1811; }
+  button.playing { color: var(--cyan); border-color: var(--cyan-dim); background: #111A19; }
+  button:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
+
+  /* an anchor, not a button, so it still works where scripted downloads are
+     blocked - the href is a real URL you can open or copy */
+  a.export {
+    font-family: var(--mono); font-size: 10px; letter-spacing: .12em;
+    text-transform: uppercase; color: var(--ink-faint); text-decoration: none;
+    background: var(--recess); border: 1px solid var(--panel-edge);
+    border-radius: 3px; padding: 9px 13px; display: inline-block;
+    transition: color .15s, border-color .15s;
+  }
+  a.export:hover { color: var(--ink); }
+  a.export[aria-disabled="true"] { opacity: .35; pointer-events: none; }
+  a.export:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
+
+  .tempo-row { display: flex; align-items: center; gap: 9px; }
+  input[type=range] { width: 132px; accent-color: var(--amber); padding: 0; border: 0; background: none; }
+  .tempo-val { font-size: 13px; color: var(--amber); min-width: 58px; }
+
+  .status { font-size: 12px; line-height: 1.55; min-height: 18px; }
+  .status .err { color: var(--red); }
+  .status .ok  { color: var(--ink-faint); }
+  .chips { display: flex; gap: 6px; flex-wrap: wrap; }
+  .chip {
+    font-size: 10px; letter-spacing: .1em;
+    padding: 5px 9px; border-radius: 3px; cursor: pointer;
+    border: 1px solid var(--panel-edge); background: var(--recess); color: var(--ink-faint);
+  }
+  .chip.on { color: var(--amber); border-color: var(--amber-dim); background: #1C1811; }
+  .options { display: flex; flex-direction: column; gap: 6px; }
+  .opt-row {
+    display: grid; grid-template-columns: 62px 1fr; align-items: baseline; gap: 8px;
+  }
+  .opt-row .opts { display: flex; gap: 6px; flex-wrap: wrap; }
+  .opt-note {
+    font-size: 12px; color: var(--amber); min-width: 56px;
+  }
+  .opt-note small { color: var(--ink-faint); }
+  .opt {
+    /* text-transform must stay none: in a Roman numeral, case IS the chord
+       quality, and rendering ii as II says something different. */
+    font-size: 12px; text-transform: none; letter-spacing: 0;
+    padding: 4px 9px; border-radius: 3px; cursor: pointer;
+    border: 1px solid var(--panel-edge); background: var(--recess);
+    color: var(--ink-faint); font-family: var(--mono);
+  }
+  .opt:hover { color: var(--ink); }
+  .opt.on { color: var(--amber); border-color: var(--amber-dim); background: #1C1811; }
+  .opt.dominant.on     { color: var(--amber); }
+  .opt-none { font-size: 11px; color: var(--red); }
+
+  /* characters a keyboard makes awkward, one click away */
+  .inserts { display: flex; gap: 4px; margin-top: 5px; }
+  .inserts button {
+    font-size: 13px; text-transform: none; letter-spacing: 0;
+    padding: 2px 9px; min-width: 30px; line-height: 1.5;
+  }
+  .exceptions {
+    font-size: 11px; color: var(--cyan-dim); line-height: 1.6;
+    border-left: 2px solid var(--cyan-dim); padding-left: 9px;
+  }
+  .exceptions b { color: var(--cyan); font-weight: 400; }
+  .exceptions .exc-what { color: var(--cyan-dim); margin-top: 5px; }
+  .exceptions .exc-why { color: var(--ink-faint); margin: 2px 0 0 14px; max-width: 74ch; }
+
+  .hint { font-size: 11px; color: var(--ink-faint); line-height: 1.6; }
+  .hint code { color: var(--cyan); }
+</style>
+
+<div class="rig">
+
+  <div class="score-wrap">
+    <svg class="score" id="score" role="img" aria-label="Four-part realization"></svg>
+  </div>
+
+  <div class="legend">
+    <span><i style="background:var(--v-soprano)"></i>soprano</span>
+    <span><i style="background:var(--v-alto)"></i>alto</span>
+    <span><i style="background:var(--v-tenor)"></i>tenor</span>
+    <span><i style="background:var(--v-bass)"></i>bass</span>
+    <span class="build" id="build"></span>
+  </div>
+
+  <div class="status" id="status"></div>
+  <div class="chips" id="alts"></div>
+
+  <div class="controls">
+    <div class="field">
+      <label for="key">Key</label>
+      <select id="key"></select>
+    </div>
+
+    <div class="field grow">
+      <label for="prog">Progression</label>
+      <input id="prog" value="I IV V I" spellcheck="false"
+             placeholder="I IV V I  ·  i N6 V i  ·  i iv Ger+6 V  ·  I V/V V I">
+      <div class="inserts" id="inserts"></div>
+    </div>
+
+    <div class="field grow">
+      <label for="soprano">Melody (soprano) &mdash; optional</label>
+      <input id="soprano" spellcheck="false"
+             placeholder="E5 F5 D5 C5    &middot;    leave empty to let the engine choose">
+    </div>
+
+    <div class="field">
+      <label for="profile">Rule profile</label>
+      <select id="profile"></select>
+    </div>
+
+    <div class="field">
+      <label for="tempo">Tempo</label>
+      <div class="tempo-row">
+        <input type="range" id="tempo" min="40" max="200" step="2" value="84">
+        <span class="tempo-val" id="tempoVal">84 bpm</span>
+      </div>
+    </div>
+
+    <button class="primary" id="go">Realize</button>
+    <button id="play" disabled>Play</button>
+    <a id="export" class="export" href="#" download>Export MIDI</a>
+  </div>
+
+  <div class="exceptions" id="exceptions"></div>
+  <div class="options" id="options"></div>
+
+  <div class="hint">
+    Triads and sevenths in any inversion (<code>I6</code>, <code>V65</code>),
+    secondary dominants (<code>V/V</code>, <code>vii&#176;7/V</code>),
+    diminished sevenths (<code>vii&#176;7</code>), and augmented sixths
+    (<code>It+6</code>, <code>Fr+6</code>, <code>Ger+6</code>).
+    Stems up are soprano and tenor; stems down are alto and bass.
+    Also the Neapolitan (<code>N6</code>). Write a melody to harmonize it: every
+    chord that can carry each note appears below, and clicking one rebuilds the
+    progression. Rules the engine breaks on purpose are listed with the reason.
+  </div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  /* Glyph outlines from Apple Symbols - proprietary, swap for Bravura (SIL OFL)
+     before this is public. Staff-space units, origin on the line each names. */
+  var G_CLEF_D = "M0 -0.018Q0 -0.3378 0.0968 -0.6059Q0.1937 -0.8739 0.3581 -1.1036Q0.5225 -1.3333 0.7432 -1.536Q0.964 -1.7387 1.2162 -1.9369Q1.1622 -2.2387 1.1577 -2.5856Q1.1577 -3.1802 1.3378 -3.545Q1.518 -3.9234 1.8288 -3.9234Q2.045 -3.9234 2.1779 -3.6824Q2.3108 -3.4414 2.3108 -2.982Q2.3108 -2.3964 2.0135 -1.9865Q1.9099 -1.8468 1.7793 -1.7072Q1.6486 -1.5676 1.482 -1.4279Q1.5541 -1.0856 1.6171 -0.6982Q2.036 -0.6982 2.2973 -0.4369Q2.5631 -0.1712 2.5631 0.2613Q2.5631 0.6081 2.3941 0.8559Q2.2252 1.1036 1.9414 1.2207Q1.973 1.4324 1.9887 1.6194Q2.0045 1.8063 2.0045 1.9775Q2.0045 2.4279 1.795 2.6306Q1.5856 2.8333 1.2432 2.8333Q0.9099 2.8333 0.7117 2.6396Q0.5135 2.4414 0.5135 2.2117Q0.509 2.009 0.6239 1.8784Q0.7387 1.7477 0.9279 1.7477Q1.1171 1.7477 1.2207 1.8649Q1.3243 1.982 1.3243 2.1532Q1.3243 2.2477 1.2883 2.3221Q1.2523 2.3964 1.1892 2.4437Q1.1261 2.491 1.045 2.5068Q0.964 2.5225 0.8694 2.5Q0.9865 2.6712 1.2523 2.6712Q1.5495 2.6712 1.7005 2.4955Q1.8514 2.3198 1.8514 1.982Q1.8514 1.8243 1.8356 1.6486Q1.8198 1.473 1.7928 1.2703Q1.6351 1.3108 1.4595 1.3108Q1.1441 1.3108 0.8784 1.2252Q0.6126 1.1396 0.4167 0.9707Q0.2207 0.8018 0.1104 0.5541Q0 0.3063 0 -0.018ZM1.6667 0.482Q1.6171 0.1486 1.5586 -0.1757Q1.3514 -0.1757 1.214 -0.0495Q1.0766 0.0766 1.0766 0.2928Q1.0766 0.4324 1.1464 0.5405Q1.2162 0.6486 1.3423 0.7117Q1.3243 0.7613 1.3108 0.7973Q1.1081 0.7432 0.9595 0.5721Q0.8108 0.4009 0.8108 0.0991Q0.8108 -0.2297 1.045 -0.464Q1.2252 -0.6351 1.4685 -0.6847Q1.3829 -1.1306 1.3423 -1.3153Q1.1577 -1.1667 0.9842 -1.0068Q0.8108 -0.8468 0.6757 -0.6712Q0.5405 -0.4955 0.4595 -0.2973Q0.3784 -0.0991 0.3784 0.1306Q0.3784 0.3874 0.464 0.5743Q0.5495 0.7613 0.7005 0.8829Q0.8514 1.0045 1.0541 1.0631Q1.2568 1.1216 1.491 1.1216Q1.6396 1.1216 1.7613 1.0856Q1.7117 0.7883 1.6667 0.482ZM1.3829 -2.0495Q1.7342 -2.3063 1.8941 -2.5518Q2.0541 -2.7973 2.0541 -3.0586Q2.0541 -3.1847 1.9955 -3.2793Q1.9369 -3.3739 1.8243 -3.3739Q1.6126 -3.3739 1.4865 -3.0721Q1.3604 -2.7793 1.3604 -2.3514Q1.3604 -2.2117 1.3829 -2.0495ZM2.2568 0.4054Q2.2568 0.2793 2.2095 0.1712Q2.1622 0.0631 2.0856 -0.0135Q2.009 -0.0901 1.9099 -0.1329Q1.8108 -0.1757 1.7072 -0.1757Q1.7523 0.036 1.8018 0.3514Q1.8468 0.6396 1.9009 1.027Q2.0946 0.9234 2.1757 0.7477Q2.2568 0.5721 2.2568 0.4054Z";
+  var F_CLEF_D = "M1.0077 -1.0769Q1.2615 -1.0769 1.4679 -0.9859Q1.6744 -0.8949 1.8205 -0.7321Q1.9667 -0.5692 2.0462 -0.3449Q2.1256 -0.1205 2.1256 0.1462Q2.1256 0.3308 2.091 0.5064Q2.0564 0.6821 1.9923 0.8449Q1.9282 1.0077 1.841 1.1577Q1.7538 1.3077 1.6462 1.441Q1.5462 1.5641 1.4218 1.6756Q1.2974 1.7872 1.1615 1.8833Q1.0256 1.9795 0.8872 2.0564Q0.7487 2.1333 0.6205 2.1885Q0.4923 2.2436 0.3846 2.2731Q0.2769 2.3026 0.2026 2.3026Q0.1487 2.3026 0.1487 2.259Q0.1487 2.2333 0.1705 2.2179Q0.1923 2.2026 0.2256 2.1897Q0.5846 2.0385 0.8718 1.8038Q1.159 1.5692 1.3487 1.2513Q1.4846 1.0256 1.5577 0.7628Q1.6308 0.5 1.6308 0.1974Q1.6308 -0.0103 1.5821 -0.2Q1.5333 -0.3897 1.4372 -0.5359Q1.341 -0.6821 1.2 -0.7679Q1.059 -0.8538 0.8769 -0.8538Q0.7872 -0.8538 0.6974 -0.8256Q0.6077 -0.7974 0.5333 -0.7436Q0.459 -0.6897 0.4103 -0.6103Q0.3615 -0.5308 0.3564 -0.4282Q0.4 -0.4487 0.4551 -0.4615Q0.5103 -0.4744 0.5872 -0.4744Q0.6744 -0.4744 0.7513 -0.4436Q0.8282 -0.4128 0.8859 -0.3538Q0.9436 -0.2949 0.9782 -0.2103Q1.0128 -0.1256 1.0128 -0.0179Q1.0128 0.2026 0.8808 0.3244Q0.7487 0.4462 0.5231 0.4462Q0.4179 0.4462 0.3231 0.4103Q0.2282 0.3744 0.1564 0.3013Q0.0846 0.2282 0.0423 0.1167Q0 0.0051 0 -0.1436Q0 -0.3333 0.0756 -0.5026Q0.1513 -0.6718 0.2859 -0.8Q0.4205 -0.9282 0.6051 -1.0026Q0.7897 -1.0769 1.0077 -1.0769ZM2.3538 -0.5Q2.3538 -0.4103 2.4154 -0.3487Q2.4769 -0.2872 2.5667 -0.2872Q2.6564 -0.2872 2.7192 -0.3487Q2.7821 -0.4103 2.7821 -0.5Q2.7821 -0.5897 2.7192 -0.6526Q2.6564 -0.7154 2.5667 -0.7154Q2.4769 -0.7154 2.4154 -0.6526Q2.3538 -0.5897 2.3538 -0.5ZM2.3538 0.5026Q2.3538 0.5923 2.4154 0.6538Q2.4769 0.7154 2.5667 0.7154Q2.6564 0.7154 2.7192 0.6538Q2.7821 0.5923 2.7821 0.5026Q2.7821 0.4128 2.7192 0.35Q2.6564 0.2872 2.5667 0.2872Q2.4769 0.2872 2.4154 0.35Q2.3538 0.4128 2.3538 0.5026Z";
+  var SHARP_D = "M0.7037 -0.9993V-0.598L0.8597 -0.678L0.8583 -0.4963L0.7037 -0.4163L0.7064 0.1356L0.8597 0.0583V0.2441L0.7051 0.3227L0.7078 0.7146H0.6305L0.6292 0.362L0.2305 0.5627L0.2332 0.9966L0.16 0.998L0.1586 0.5993L0.0014 0.678V0.4936L0.16 0.4122L0.1573 -0.1397L0 -0.0597V-0.2427L0.1573 -0.3227L0.1559 -0.72H0.2305L0.2319 -0.362L0.6292 -0.5573L0.6278 -1.002ZM0.6292 -0.3756 0.2305 -0.1749 0.2332 0.3756 0.6292 0.1763Z";
+  var FLAT_D = "M0 -1.4468H0.0786V-0.3037Q0.1763 -0.4041 0.2529 -0.4522Q0.3295 -0.5003 0.3783 -0.5003Q0.4353 -0.5003 0.482 -0.4793Q0.5288 -0.4583 0.5641 -0.4197Q0.5993 -0.381 0.6183 -0.3295Q0.6373 -0.278 0.6373 -0.2169Q0.6373 -0.1776 0.6142 -0.1322Q0.5912 -0.0868 0.5586 -0.0414Q0.5261 0.0041 0.4895 0.0441Q0.4529 0.0841 0.4244 0.1125L0.0095 0.5031ZM0.0827 0.3756Q0.1315 0.3119 0.1871 0.238Q0.2427 0.1641 0.2888 0.0841Q0.3349 0.0041 0.3654 -0.0814Q0.3959 -0.1668 0.3959 -0.2522Q0.3959 -0.3078 0.3661 -0.3417Q0.3363 -0.3756 0.2861 -0.3756Q0.2441 -0.3756 0.1986 -0.3532Q0.1532 -0.3308 0.1247 -0.2997L0.0786 -0.2414Z";
+  var NATURAL_D = "M0.0664 -0.9898V-0.3634L0.5166 -0.5912L0.5139 1.0047H0.4515L0.4502 0.3715L0 0.598V-0.9871ZM0.4502 -0.3675 0.0664 -0.1722V0.3661L0.4515 0.1722Z";
+
+
+  /* ---------- geometry ----------
+     One constant governs the score. Every pitch sits at its absolute
+     position on the grand staff, so a tenor G4 and an alto G4 land on the
+     same line - which is correct, and is why stem direction carries the
+     voice: soprano and tenor up, alto and bass down. */
+  var STEP = 12, SPACE = STEP * 2, STEM = 2.4 * SPACE;
+  var TOP_REF = 40;                            // y is measured down from here
+
+  var TREBLE = [30, 32, 34, 36, 38];           // E4 G4 B4 D5 F5
+  var BASS   = [18, 20, 22, 24, 26];           // G2 B2 D3 F3 A3
+  var MIDDLE_C = 28;
+  var G_LINE = 32, F_LINE = 24;
+  var G_CLEF_VOID = 0.166, G_CLEF_SCALE = 0.92, G_CLEF_LIFT = 0.194;
+
+  var LEFT = 18, CLEF_W = 96, COL_W = 84, SIG_W = 13;
+
+  /* Where each accidental of a key signature sits, in the conventional order.
+     Bass clef repeats the pattern a third lower. */
+  var SIG_ORDER = {
+    sharp: { treble: [38, 35, 39, 36, 33, 37, 34], bass: [24, 21, 25, 22, 19, 23, 20] },
+    flat:  { treble: [34, 37, 33, 36, 32, 35, 31], bass: [20, 23, 19, 22, 18, 21, 17] },
+  };
+  var VOICES = ["soprano", "alto", "tenor", "bass"];
+  var STEM_UP = { soprano: true, alto: false, tenor: true, bass: false };
+  var LETTERS = "CDEFGAB";
+
+  function dia(n) { return n.letter + 7 * n.octave; }
+  function yOf(d) { return (TOP_REF - d) * STEP; }
+
+  var SVGNS = "http://www.w3.org/2000/svg";
+  function el(tag, attrs) {
+    var node = document.createElementNS(SVGNS, tag);
+    for (var k in attrs) node.setAttribute(k, attrs[k]);
+    return node;
+  }
+  function line(x1, y1, x2, y2, cls) {
+    return el("line", { x1: x1, y1: y1, x2: x2, y2: y2, "class": cls });
+  }
+  function glyph(d, x, y, k, cls) {
+    return el("path", { "class": cls, d: d,
+      transform: "translate(" + x + "," + y + ") scale(" + SPACE * (k || 1) + ")" });
+  }
+
+  var score = document.getElementById("score");
+  var current = null, currentIndex = 0;
+
+  /* ---------- drawing ---------- */
+
+  function ledgersFor(d) {
+    /* The gap between the staves is only two spaces wide, so middle C is the
+       single ledger position in it - everything else in the gap sits in a
+       space or on a staff line already. */
+    var out = [];
+    for (var a = 40; a <= d; a += 2) out.push(a);                // above the treble
+    for (var b = 16; b >= d; b -= 2) out.push(b);                // below the bass
+    if (d === MIDDLE_C) out.push(MIDDLE_C);
+    return out;
+  }
+
+  function draw(payload, resultIndex) {
+    while (score.firstChild) score.removeChild(score.firstChild);
+    if (!payload || !payload.ok) {
+      score.setAttribute("width", 420);
+      score.setAttribute("height", 300);
+      score.setAttribute("viewBox", "0 0 420 300");
+      return;
+    }
+
+    var chords = payload.results[resultIndex].chords;
+    /* a result may have re-inverted something, so take its own numerals */
+    var numerals = payload.results[resultIndex].numerals || payload.numerals;
+    var sigCount = (payload.signature && payload.signature.count) || 0;
+    var W = LEFT + CLEF_W + sigCount * SIG_W + chords.length * COL_W + 34;
+
+    /* Size the page to the music rather than to the worst case, so a piece
+       that never leaves the staff is not framed by empty paper. */
+    var positions = [];
+    chords.forEach(function (chord) {
+      VOICES.forEach(function (name) { positions.push(dia(chord[name])); });
+    });
+    var highest = Math.max.apply(null, positions);
+    var lowest = Math.min.apply(null, positions);
+    var top = Math.min(yOf(TREBLE[4]) - 16, yOf(highest) - STEM - 8);
+    var bottom = Math.max(yOf(BASS[0]) + 16, yOf(lowest) + STEM + 8) + 38;
+    var H = bottom - top;
+
+    score.setAttribute("width", W);
+    score.setAttribute("height", H);
+    score.setAttribute("viewBox", "0 " + top + " " + W + " " + H);
+
+    var staffEnd = W - 18;
+
+    TREBLE.concat(BASS).forEach(function (d) {
+      score.appendChild(line(LEFT, yOf(d), staffEnd, yOf(d), "staff-line"));
+    });
+    score.appendChild(line(LEFT, yOf(TREBLE[4]), LEFT, yOf(BASS[0]), "barline"));
+    score.appendChild(line(staffEnd, yOf(TREBLE[4]), staffEnd, yOf(BASS[0]), "barline-end"));
+
+    score.appendChild(glyph(G_CLEF_D, LEFT + 12,
+      yOf(G_LINE) - (G_CLEF_LIFT + G_CLEF_VOID * G_CLEF_SCALE) * SPACE,
+      G_CLEF_SCALE, "clef"));
+    score.appendChild(glyph(F_CLEF_D, LEFT + 12, yOf(F_LINE), 1, "clef"));
+
+    /* key signature, so the staff says what key it is in and the notes only
+       carry accidentals that genuinely depart from it */
+    var sig = payload.signature || { kind: null, count: 0 };
+    var sigGlyph = sig.kind === "sharp" ? SHARP_D : FLAT_D;
+    for (var s = 0; s < (sig.count || 0); s++) {
+      var sx = LEFT + CLEF_W + 2 + s * SIG_W;
+      score.appendChild(glyph(sigGlyph, sx, yOf(SIG_ORDER[sig.kind].treble[s]), 0.8, "clef"));
+      score.appendChild(glyph(sigGlyph, sx, yOf(SIG_ORDER[sig.kind].bass[s]), 0.8, "clef"));
+    }
+
+    chords.forEach(function (chord, index) {
+      var x = LEFT + CLEF_W + sigCount * SIG_W + index * COL_W + COL_W / 2;
+
+      var hit = el("rect", { "class": "col-hit", x: x - COL_W / 2 + 3,
+        y: top, width: COL_W - 6, height: H });
+      hit.dataset.index = index;
+      score.appendChild(hit);
+
+      /* ledgers once per position, however many voices want them */
+      var drawn = {};
+      VOICES.forEach(function (name) {
+        ledgersFor(dia(chord[name])).forEach(function (l) {
+          if (drawn[l]) return;
+          drawn[l] = 1;
+          score.appendChild(line(x - 19, yOf(l), x + 19, yOf(l), "ledger"));
+        });
+      });
+
+      /* noteheads, nudged apart when two voices share or neighbour a position */
+      var seen = {};
+      VOICES.forEach(function (name) {
+        var note = chord[name], d = dia(note), y = yOf(d);
+        var group = el("g", { "class": "v-" + name });
+        score.appendChild(group);
+        var shift = 0;
+        for (var other in seen) if (Math.abs(seen[other] - d) <= 1) shift = 15;
+        seen[name] = d;
+
+        var nx = x + (STEM_UP[name] ? shift : -shift);
+
+        if (note.accidental) {
+          var mark = note.alteration > 0 ? SHARP_D
+                   : note.alteration < 0 ? FLAT_D : NATURAL_D;
+          group.appendChild(glyph(mark, nx - 30, y, 0.8, "acc"));
+        }
+        group.appendChild(el("ellipse", { "class": "head", cx: nx, cy: y,
+          rx: 7.4, ry: 5.5, transform: "rotate(-21 " + nx + " " + y + ")" }));
+        group.appendChild(STEM_UP[name]
+          ? line(nx + 6.8, y - 1.6, nx + 6.8, y - STEM, "stem")
+          : line(nx - 6.8, y + 1.6, nx - 6.8, y + STEM, "stem"));
+      });
+
+      var label = el("text", { "class": "numeral", x: x, y: bottom - 12 });
+      label.textContent = numerals[index];
+      score.appendChild(label);
+      var beat = el("text", { "class": "beat", x: x, y: bottom - 28 });
+      beat.textContent = index + 1;
+      score.appendChild(beat);
+    });
+  }
+
+  function highlight(index) {
+    [].forEach.call(score.querySelectorAll(".col-hit"), function (r) {
+      r.classList.toggle("on", +r.dataset.index === index);
+    });
+  }
+
+  /* ---------- audio ---------- */
+
+  var audio = null, master = null;
+
+  function ensureAudio() {
+    if (audio) return;
+    var AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return;
+    audio = new AC();
+    master = audio.createGain();
+    master.gain.value = 0.9;
+    master.connect(audio.destination);
+  }
+
+  var PARTIALS = [[1, 1.0], [2, 0.4], [3, 0.2], [4, 0.1]];
+
+  function strike(midi, at, seconds) {
+    var freq = 440 * Math.pow(2, (midi - 69) / 12);
+    var gain = audio.createGain();
+    gain.gain.setValueAtTime(0.0001, at);
+    gain.gain.linearRampToValueAtTime(0.10, at + 0.008);
+    gain.gain.exponentialRampToValueAtTime(0.0004, at + seconds * 0.98);
+
+    var filter = audio.createBiquadFilter();
+    filter.type = "lowpass";
+    filter.Q.value = 0.4;
+    filter.frequency.setValueAtTime(Math.min(freq * 9, 11000), at);
+    filter.frequency.exponentialRampToValueAtTime(Math.max(freq * 2.2, 200),
+      at + seconds * 0.9);
+    filter.connect(gain);
+    gain.connect(master);
+
+    PARTIALS.forEach(function (p) {
+      var osc = audio.createOscillator(), g = audio.createGain();
+      osc.type = "sine";
+      osc.frequency.value = freq * p[0] * (1 + 0.0007 * p[0] * p[0]);
+      g.gain.value = p[1];
+      osc.connect(g); g.connect(filter);
+      osc.start(at); osc.stop(at + seconds + 0.1);
+    });
+  }
+
+  var playing = false, timers = [];
+
+  function stopPlayback() {
+    playing = false;
+    timers.forEach(clearTimeout);
+    timers = [];
+    highlight(-1);
+    var button = document.getElementById("play");
+    button.classList.remove("playing");
+    button.textContent = "Play";
+  }
+
+  function play() {
+    if (!current || !current.ok) return;
+    if (playing) { stopPlayback(); return; }
+    ensureAudio();
+    if (!audio) return;
+    if (audio.state === "suspended") audio.resume();
+
+    var chords = current.results[currentIndex].chords;
+    var beat = 60 / (+document.getElementById("tempo").value);
+    var start = audio.currentTime + 0.06;
+
+    playing = true;
+    var button = document.getElementById("play");
+    button.classList.add("playing");
+    button.textContent = "Stop";
+
+    chords.forEach(function (chord, index) {
+      VOICES.forEach(function (name) {
+        strike(chord[name].midi, start + index * beat, beat);
+      });
+      timers.push(setTimeout(function () { highlight(index); },
+        (start - audio.currentTime + index * beat) * 1000));
+    });
+    timers.push(setTimeout(stopPlayback,
+      (start - audio.currentTime + chords.length * beat) * 1000 + 120));
+  }
+
+  /* ---------- wiring ---------- */
+
+  var status = document.getElementById("status");
+  var altsBox = document.getElementById("alts");
+
+  function setStatus(text, kind) {
+    status.innerHTML = "";
+    if (!text) return;
+    var span = document.createElement("span");
+    span.className = kind || "ok";
+    span.textContent = text;
+    status.appendChild(span);
+  }
+
+  function updateExport() {
+    var link = document.getElementById("export");
+    if (!current || !current.ok) {
+      link.setAttribute("aria-disabled", "true");
+      link.removeAttribute("href");
+      return;
+    }
+    link.setAttribute("aria-disabled", "false");
+    link.href = "/api/midi?" + new URLSearchParams({
+      key: document.getElementById("key").value,
+      progression: document.getElementById("prog").value,
+      profile: document.getElementById("profile").value,
+      tempo: document.getElementById("tempo").value,
+      soprano: melodyText(),
+      alt: String(currentIndex),
+    }).toString();
+  }
+
+  function renderExceptions(payload) {
+    var box = document.getElementById("exceptions");
+    box.innerHTML = "";
+    if (!payload || !payload.ok) return;
+    var waived = payload.results[currentIndex].exceptions || [];
+    if (!waived.length) return;
+    var heading = document.createElement("div");
+    heading.innerHTML = "<b>" + waived.length + " rule" +
+      (waived.length > 1 ? "s" : "") + " broken on purpose</b>";
+    box.appendChild(heading);
+    waived.forEach(function (item) {
+      var line = document.createElement("div");
+      line.className = "exc-what";
+      line.textContent = "chord " + (item.chord + 1) + " · " + item.message;
+      box.appendChild(line);
+      if (item.reason) {
+        var why = document.createElement("div");
+        why.className = "exc-why";
+        why.textContent = item.reason;
+        box.appendChild(why);
+      }
+    });
+  }
+
+  function renderAlternates(payload) {
+    altsBox.innerHTML = "";
+    if (!payload || !payload.ok || payload.results.length < 2) return;
+    payload.results.forEach(function (result, index) {
+      var chip = document.createElement("button");
+      chip.className = "chip" + (index === currentIndex ? " on" : "");
+      chip.textContent = (index === 0 ? "best" : "alt " + (index + 1)) +
+        "  cost " + result.cost.toFixed(2);
+      chip.addEventListener("click", function () {
+        currentIndex = index;
+        draw(current, currentIndex);
+        renderAlternates(current);
+        renderExceptions(current);
+        updateExport();
+      });
+      altsBox.appendChild(chip);
+    });
+  }
+
+  /* ---------- harmonizing a given melody ---------- */
+
+  var choices = [];        // one numeral per melody note
+
+  function melodyText() { return document.getElementById("soprano").value.trim(); }
+
+  function renderOptions(payload) {
+    var box = document.getElementById("options");
+    box.innerHTML = "";
+    if (!payload || !payload.ok) return;
+
+    payload.notes.forEach(function (entry, index) {
+      var row = document.createElement("div");
+      row.className = "opt-row";
+
+      var label = document.createElement("span");
+      label.className = "opt-note";
+      label.innerHTML = "<small>" + (index + 1) + "</small> " + entry.note;
+      row.appendChild(label);
+
+      var opts = document.createElement("span");
+      opts.className = "opts";
+      row.appendChild(opts);
+
+      if (!entry.options.length) {
+        var none = document.createElement("span");
+        none.className = "opt-none";
+        none.textContent = "no chord in the vocabulary carries this note";
+        opts.appendChild(none);
+        box.appendChild(row);
+        return;
+      }
+
+      entry.options.forEach(function (option) {
+        var chip = document.createElement("button");
+        chip.className = "opt " + option.function +
+          (choices[index] === option.numeral ? " on" : "");
+        chip.textContent = option.numeral;
+        chip.title = option.spelling.join(" ") + "   bass " + option.bass +
+                     "   " + option.function;
+        chip.addEventListener("click", function () {
+          choices[index] = option.numeral;
+          document.getElementById("prog").value = choices.join(" ");
+          renderOptions(payload);
+          realize();
+        });
+        opts.appendChild(chip);
+      });
+      box.appendChild(row);
+    });
+  }
+
+  function loadOptions() {
+    var melody = melodyText();
+    var box = document.getElementById("options");
+    if (!melody) { box.innerHTML = ""; choices = []; return Promise.resolve(); }
+
+    return fetch("/api/candidates", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        key: document.getElementById("key").value,
+        soprano: melody,
+        profile: document.getElementById("profile").value,
+      }),
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (payload) {
+        if (!payload.ok) { box.innerHTML = ""; setStatus(payload.error, "err"); return; }
+        /* Keep whatever the progression box already says when it lines up,
+           otherwise start each note on its first workable chord so there is
+           something to hear before any clicking happens. */
+        var typed = document.getElementById("prog").value.trim().split(/\s+/).filter(Boolean);
+        choices = payload.notes.map(function (entry, i) {
+          var options = entry.options.map(function (o) { return o.numeral; });
+          if (typed.length === payload.notes.length && options.indexOf(typed[i]) >= 0) {
+            return typed[i];
+          }
+          return options[0] || "";
+        });
+        document.getElementById("prog").value = choices.join(" ");
+        renderOptions(payload);
+      })
+      .catch(function () { box.innerHTML = ""; });
+  }
+
+  function realize() {
+    stopPlayback();
+    var button = document.getElementById("go");
+    button.disabled = true;
+    setStatus("working…");
+
+    fetch("/api/realize", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        key: document.getElementById("key").value,
+        progression: document.getElementById("prog").value,
+        profile: document.getElementById("profile").value,
+        soprano: melodyText(),
+        alternates: 3,
+      }),
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (payload) {
+        button.disabled = false;
+        currentIndex = 0;
+        if (!payload.ok) {
+          current = null;
+          /* A stale server is otherwise invisible: the page reloads fine while the
+     Python behind it is whatever was running when it started. */
+  fetch("/api/profiles").then(function (r) { return r.json(); })
+    .then(function (d) {
+      document.getElementById("build").textContent = "engine " + (d.build || "?");
+    }).catch(function () {});
+
+  draw(null, 0);
+  updateExport();
+          renderAlternates(null);
+          document.getElementById("play").disabled = true;
+          updateExport();
+          setStatus(payload.error, "err");
+          return;
+        }
+        current = payload;
+        draw(payload, 0);
+        renderAlternates(payload);
+        renderExceptions(payload);
+        document.getElementById("play").disabled = false;
+        updateExport();
+        var swaps = payload.results[0].substitutions || [];
+        if (swaps.length) {
+          var note = document.createElement("div");
+          note.style.color = "var(--cyan-dim)";
+          note.textContent = "as written it had no answer; re-voiced " +
+            swaps.map(function (x) {
+              return x.written + " as " + x.used + " (chord " + (x.chord + 1) + ")";
+            }).join(", ");
+          document.getElementById("exceptions").appendChild(note);
+        }
+        var faults = payload.results[0].violations.length;
+        setStatus(faults
+          ? faults + " violation" + (faults === 1 ? "" : "s") + " remain"
+          : "no violations  ·  " + payload.numerals.length + " chords  ·  " +
+            payload.profile +
+            (payload.sopranoFixed ? "  ·  melody fixed, ATB filled in" : ""),
+          faults ? "err" : "ok");
+      })
+      .catch(function (e) {
+        button.disabled = false;
+        setStatus("could not reach the engine: " + e.message, "err");
+      });
+  }
+
+  /* key list: every major and minor whose signature stays inside 6 accidentals */
+  var KEYS = [];
+  ["C", "G", "D", "A", "E", "B", "F#", "F", "Bb", "Eb", "Ab", "Db", "Gb"]
+    .forEach(function (t) { KEYS.push(t + " major"); });
+  ["a", "e", "b", "f#", "c#", "g#", "d#", "d", "g", "c", "f", "bb", "eb"]
+    .forEach(function (t) { KEYS.push(t + " minor"); });
+
+  var keySelect = document.getElementById("key");
+  KEYS.forEach(function (k) {
+    var option = document.createElement("option");
+    option.value = k;
+    option.textContent = k;
+    keySelect.appendChild(option);
+  });
+  keySelect.value = "C major";
+
+  function loadProfiles() {
+    var select = document.getElementById("profile");
+    return fetch("/api/profiles")
+      .then(function (r) { return r.json(); })
+      .then(function (data) { return data.profiles || []; })
+      .catch(function () { return []; })
+      .then(function (names) {
+        if (!names.length) names = ["kostka_payne"];
+        names.forEach(function (name) {
+          var option = document.createElement("option");
+          option.value = name;
+          option.textContent = name.replace(/_/g, " ");
+          select.appendChild(option);
+        });
+        select.value = names.indexOf("kostka_payne") >= 0 ? "kostka_payne" : names[0];
+      });
+  }
+
+  /* insert buttons for the characters a keyboard hides */
+  [["°", "diminished"], ["ø", "half diminished"], ["♭", "flat"],
+   ["/", "secondary, as in V/V"], ["N6", "Neapolitan"]].forEach(function (pair) {
+    var b = document.createElement("button");
+    b.type = "button";
+    b.textContent = pair[0];
+    b.title = pair[1];
+    b.addEventListener("click", function () {
+      var field = document.getElementById("prog");
+      var start = field.selectionStart, end = field.selectionEnd;
+      field.value = field.value.slice(0, start) + pair[0] + field.value.slice(end);
+      field.selectionStart = field.selectionEnd = start + pair[0].length;
+      field.focus();
+    });
+    document.getElementById("inserts").appendChild(b);
+  });
+
+  var tempo = document.getElementById("tempo");
+  tempo.addEventListener("input", function () {
+    document.getElementById("tempoVal").textContent = tempo.value + " bpm";
+    updateExport();          // the exported file carries the tempo
+  });
+
+  document.getElementById("go").addEventListener("click", realize);
+  document.getElementById("play").addEventListener("click", play);
+  document.getElementById("prog").addEventListener("keydown", function (e) {
+    if (e.key === "Enter") realize();
+  });
+
+  var sopranoBox = document.getElementById("soprano");
+  function refreshMelody() { loadOptions().then(function () { realize(); }); }
+  sopranoBox.addEventListener("change", refreshMelody);
+  sopranoBox.addEventListener("keydown", function (e) {
+    if (e.key === "Enter") refreshMelody();
+  });
+  [keySelect, document.getElementById("profile")].forEach(function (node) {
+    node.addEventListener("change", function () {
+      /* a new key changes which chords can carry the melody */
+      if (melodyText()) refreshMelody(); else if (current) realize();
+    });
+  });
+
+  /* A stale server is otherwise invisible: the page reloads fine while the
+     Python behind it is whatever was running when it started. */
+  fetch("/api/profiles").then(function (r) { return r.json(); })
+    .then(function (d) {
+      document.getElementById("build").textContent = "engine " + (d.build || "?");
+    }).catch(function () {});
+
+  draw(null, 0);
+  updateExport();
+  // The first realization waits for the profile list, or it would post an
+  // empty profile name.
+  loadProfiles().then(realize);
+})();
+</script>

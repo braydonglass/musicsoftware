@@ -1,0 +1,161 @@
+{
+  "name": "linear",
+  "description": "Approximates Aldwell/Schachter: doubling is treated as a consequence of good counterpoint rather than a rule of its own, so its costs are zero and the voice-leading costs are raised.",
+  "ranges": {
+    "soprano": [
+      "C4",
+      "G5"
+    ],
+    "alto": [
+      "G3",
+      "D5"
+    ],
+    "tenor": [
+      "C3",
+      "G4"
+    ],
+    "bass": [
+      "E2",
+      "C4"
+    ]
+  },
+  "params": {
+    "hidden_perfect_pairs": "all",
+    "german_sixth_fifths": "allow",
+    "unequal_fifths": "all",
+    "consecutive_perfects_pairs": "all",
+    "hidden_perfect_leap": "none",
+    "hidden_perfect_intervals": [
+      4,
+      5,
+      8
+    ],
+    "parallel_intervals": [
+      1,
+      4,
+      5,
+      8
+    ],
+    "motion_voices": [
+      "soprano"
+    ],
+    "parallel_fourths_with_bass_only": false,
+    "leading_tone_outer_voices": [
+      "soprano",
+      "bass"
+    ],
+    "hidden_fourth_pairs": "all"
+  },
+  "rules": {
+    "voice_range": {
+      "enabled": true,
+      "severity": "error",
+      "cost": "inf"
+    },
+    "spacing": {
+      "enabled": true,
+      "severity": "error",
+      "cost": "inf"
+    },
+    "voice_crossing": {
+      "enabled": true,
+      "severity": "error",
+      "cost": "inf"
+    },
+    "doubled_tendency_tone": {
+      "enabled": true,
+      "severity": "warning",
+      "cost": 5.0
+    },
+    "incomplete_chord": {
+      "enabled": true,
+      "severity": "warning",
+      "cost": 1.0
+    },
+    "parallel_perfect": {
+      "enabled": true,
+      "severity": "error",
+      "cost": "inf"
+    },
+    "voice_overlap": {
+      "enabled": true,
+      "severity": "error",
+      "cost": "inf"
+    },
+    "leading_tone_resolution": {
+      "enabled": true,
+      "severity": "error",
+      "cost": "inf"
+    },
+    "seventh_resolution": {
+      "enabled": true,
+      "severity": "error",
+      "cost": "inf"
+    },
+    "melodic_augmented": {
+      "enabled": true,
+      "severity": "error",
+      "cost": "inf"
+    },
+    "large_leap": {
+      "enabled": true,
+      "severity": "style",
+      "cost": 2.5
+    },
+    "leap_recovery": {
+      "enabled": true,
+      "severity": "style",
+      "cost": 4.0
+    },
+    "outer_voice_similar_motion": {
+      "enabled": true,
+      "severity": "style",
+      "cost": 1.5
+    },
+    "hidden_perfect": {
+      "enabled": true,
+      "severity": "error",
+      "cost": "inf"
+    },
+    "augmented_sixth_resolution": {
+      "enabled": true,
+      "severity": "error",
+      "cost": "inf"
+    },
+    "unequal_fifths": {
+      "enabled": true,
+      "severity": "error",
+      "cost": "inf"
+    },
+    "missing_essential_tone": {
+      "enabled": true,
+      "severity": "error",
+      "cost": "inf"
+    },
+    "voice_unison": {
+      "enabled": true,
+      "severity": "style",
+      "cost": 2.0
+    },
+    "consecutive_perfects": {
+      "enabled": true,
+      "severity": "error",
+      "cost": "inf"
+    },
+    "doubled_leading_tone": {
+      "enabled": true,
+      "severity": "warning",
+      "cost": 6.0
+    },
+    "doubling_preference": {
+      "enabled": true,
+      "severity": "style",
+      "cost": 1.5
+    },
+    "missing_seventh": {
+      "enabled": true,
+      "severity": "warning",
+      "cost": 9.0
+    }
+  }
+}

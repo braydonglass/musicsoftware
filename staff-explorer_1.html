@@ -1,0 +1,454 @@
+<title>Staff Explorer</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+
+<style>
+  :root {
+    --panel-deep: #171D24;
+    --panel-edge: #2E3845;
+    --recess:     #10151A;
+    --amber:      #F2A65A;
+    --amber-dim:  #8A6236;
+    --cyan:       #7FD4CB;
+    --ink:        #94A3B4;
+    --ink-faint:  #4C5A6B;
+    --mono: "DM Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+
+  * { box-sizing: border-box; }
+
+  .rig {
+    font-family: var(--mono);
+    background: var(--panel-deep);
+    background-image: linear-gradient(180deg, rgba(255,255,255,.028), rgba(0,0,0,.18));
+    border: 1px solid var(--panel-edge);
+    border-radius: 6px;
+    padding: 18px;
+    width: max-content;
+    margin: 0 auto;
+    color: var(--ink);
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  /* No height here on purpose: the stage sizes itself from the SVG, which
+     JS derives from STEP. Only the mobile rule needs explicit numbers,
+     because a transform takes the stage out of layout flow. */
+  .stage-wrap {}
+
+  .stage {
+    display: flex;
+    align-items: flex-start;
+    gap: 18px;
+    transform-origin: top left;
+  }
+
+  /* ---- left: the graph ---- */
+
+  .track {           /* height is set from STEP in JS */
+    /* content-box on both panels: a border-box SVG shrinks its own viewport,
+       which rescales the viewBox and pulls the staff out of step with the
+       graph. Keeping both content-box makes the two coordinate systems
+       identical, which is what the alignment depends on. */
+    box-sizing: content-box;
+    position: relative;
+    width: 72px;
+    background: var(--recess);
+    border: 1px solid var(--panel-edge);
+    border-radius: 3px;
+    cursor: ns-resize;
+    overflow: hidden;
+    touch-action: none;
+    flex: none;
+  }
+  .track:focus-visible { outline: 2px solid var(--cyan); outline-offset: 3px; }
+
+  .tick {
+    position: absolute;
+    height: 1px;
+    right: 0; width: 11px;
+    background: var(--ink-faint);
+    opacity: .35;
+  }
+  .tick.octave { left: 0; width: 100%; background: var(--panel-edge); opacity: 1; }
+
+  .handle {
+    position: absolute;
+    left: 0; right: 0;
+    height: 0;
+    margin-top: -1px;          /* centre the 2px rule on the step, not below it */
+    border-top: 2px solid var(--amber);
+    box-shadow: 0 0 12px rgba(242,166,90,.55);
+    pointer-events: none;
+  }
+  .handle::after {
+    content: "";
+    position: absolute;
+    left: 50%; top: -4px;
+    width: 7px; height: 7px;
+    margin-left: -3.5px;
+    background: var(--amber);
+    border-radius: 50%;
+  }
+
+  /* ---- right: the staff ---- */
+
+  .paper {
+    box-sizing: content-box;
+    background: var(--recess);
+    border: 1px solid var(--panel-edge);
+    border-radius: 3px;
+    cursor: ns-resize;
+    touch-action: none;
+    flex: none;
+    display: block;
+  }
+  .paper:focus-visible { outline: 2px solid var(--cyan); outline-offset: 3px; }
+
+  .staff-line { stroke: var(--ink-faint); stroke-width: 1.4; opacity: .55; }
+  .barline    { stroke: var(--ink-faint); stroke-width: 1.4; opacity: .55; }
+  .clef       { fill: var(--ink); opacity: .8; }
+  .ledger     { stroke: var(--amber-dim); stroke-width: 1.8; }
+  .note       { fill: var(--amber); }
+  .stem       { stroke: var(--amber); stroke-width: 3; stroke-linecap: round; }
+  .label      { fill: var(--amber); font-family: var(--mono); font-size: 16px;
+                letter-spacing: .04em; dominant-baseline: middle; }
+
+  @media (max-width: 480px) {
+    /* Scaling .stage visually is not enough - a transform leaves the layout
+       box at full size, so .rig keeps sizing itself to the unscaled stage
+       and overflows the viewport. The wrapper carries the scaled dimensions
+       so the layout shrinks too. Both panels scale by the same factor, so
+       the handle/notehead alignment survives untouched. */
+    .rig { padding: 12px; }
+    .stage-wrap { width: 324px; height: 327px; }
+    .stage { transform: scale(.78); }
+  }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<div class="rig">
+  <div class="stage-wrap">
+    <div class="stage" id="stage">
+
+      <div class="track" id="track" tabindex="0" role="slider"
+           aria-label="Pitch" aria-valuemin="0" aria-valuemax="28"
+           aria-valuenow="14" aria-valuetext="C4">
+        <div class="handle" id="handle"></div>
+      </div>
+
+      <svg class="paper" id="paper" role="img" aria-label="Staff, C4">
+        <g id="staffLayer"></g>
+        <g id="noteLayer"></g>
+      </svg>
+
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  /* ---------------------------------------------------------------
+     One constant drives both panels. Everything below is derived
+     from STEP, so the handle on the graph and the notehead on the
+     staff are at the same y by construction, not by tuning.
+     --------------------------------------------------------------- */
+
+  var STEP  = 12,            // pixels per diatonic step
+      SPACE = STEP * 2,      // one staff space
+      TOP   = 28,            // steps above index 0 (C2 -> C6)
+      PAD   = 40,            // room for noteheads and stems at the extremes
+      H     = TOP * STEP + PAD * 2;
+
+  var W = 320, STAFF_X0 = 10, STAFF_X1 = 250, NOTE_X = 155, LABEL_X = 264;
+
+  var LETTERS  = ["C", "D", "E", "F", "G", "A", "B"];
+  var SEMITONE = [0, 2, 4, 5, 7, 9, 11];
+
+  /* index 0 = C2, 14 = middle C, 28 = C6 */
+  function octaveOf(i) { return 2 + Math.floor(i / 7); }
+  function nameOf(i)   { return LETTERS[i % 7] + octaveOf(i); }
+  function midiOf(i)   { return (octaveOf(i) + 1) * 12 + SEMITONE[i % 7]; }
+  function freqOf(m)   { return 440 * Math.pow(2, (m - 69) / 12); }
+  function clamp(v, lo, hi) { return v < lo ? lo : (v > hi ? hi : v); }
+
+  function stepToY(i) { return PAD + (TOP - i) * STEP; }
+  function yToStep(y) { return TOP - (y - PAD) / STEP; }
+
+  var TREBLE_LINES = [16, 18, 20, 22, 24];   // E4 G4 B4 D5 F5
+  var BASS_LINES   = [4, 6, 8, 10, 12];      // G2 B2 D3 F3 A3
+  var MIDDLE_C     = 14;
+  var G_LINE       = 18;                     // G4  - anchors the treble clef
+  var F_LINE       = 10;                     // F3  - anchors the bass clef
+
+  var step = MIDDLE_C;
+
+  var track  = document.getElementById("track"),
+      handle = document.getElementById("handle"),
+      paper  = document.getElementById("paper"),
+      staffL = document.getElementById("staffLayer"),
+      noteL  = document.getElementById("noteLayer");
+
+  var SVGNS = "http://www.w3.org/2000/svg";
+  function el(tag, attrs) {
+    var n = document.createElementNS(SVGNS, tag);
+    for (var k in attrs) n.setAttribute(k, attrs[k]);
+    return n;
+  }
+  function line(x1, y1, x2, y2, cls) {
+    return el("line", { x1: x1, y1: y1, x2: x2, y2: y2, "class": cls });
+  }
+
+  /* Size both panels from H so STEP stays the only number that matters. */
+  paper.setAttribute("width", W);
+  paper.setAttribute("height", H);
+  paper.setAttribute("viewBox", "0 0 " + W + " " + H);
+  track.style.height = H + "px";
+
+  /* ---------------- static graph ---------------- */
+
+  /* One tick per diatonic step, so the graph is a ladder of the same
+     29 rungs the staff has. Every C gets a full-width rule. */
+  function drawTicks() {
+    for (var i = 0; i <= TOP; i++) {
+      var t = document.createElement("div");
+      t.className = "tick" + (i % 7 === 0 ? " octave" : "");
+      t.style.top = stepToY(i) + "px";
+      track.appendChild(t);
+    }
+  }
+
+  /* ---------------- static staff ---------------- */
+
+  function drawStaff() {
+    TREBLE_LINES.concat(BASS_LINES).forEach(function (i) {
+      staffL.appendChild(line(STAFF_X0, stepToY(i), STAFF_X1, stepToY(i), "staff-line"));
+    });
+    staffL.appendChild(
+      line(STAFF_X0, stepToY(TREBLE_LINES[4]), STAFF_X0, stepToY(BASS_LINES[0]), "barline"));
+
+    /* subtracting the scaled void pins the spiral, so SCALE pivots about it */
+    staffL.appendChild(clef(G_CLEF_D, 26,
+      stepToY(G_LINE) - (G_CLEF_LIFT + G_CLEF_VOID * G_CLEF_SCALE) * SPACE,
+      G_CLEF_SCALE));
+    staffL.appendChild(clef(F_CLEF_D, 26, stepToY(F_LINE)));
+  }
+
+  /* Clef outlines, authored in staff-space units with the origin sitting on
+     the line each clef names - so translating to stepToY() is the whole of
+     their positioning. The F clef proves its own anchor: its two dots land
+     at exactly +/-0.5 staff spaces, straddling the F line.
+
+     These were extracted from the Apple Symbols glyphs for U+1D11E and
+     U+1D122. That font is proprietary to Apple. Fine for local work; swap
+     in Bravura (SIL OFL, which permits embedding) before distributing. */
+
+  var G_CLEF_D = "M0 -0.018Q0 -0.3378 0.0968 -0.6059Q0.1937 -0.8739 0.3581 -1.1036Q0.5225 -1.3333 0.7432 -1.536Q0.964 -1.7387 1.2162 -1.9369Q1.1622 -2.2387 1.1577 -2.5856Q1.1577 -3.1802 1.3378 -3.545Q1.518 -3.9234 1.8288 -3.9234Q2.045 -3.9234 2.1779 -3.6824Q2.3108 -3.4414 2.3108 -2.982Q2.3108 -2.3964 2.0135 -1.9865Q1.9099 -1.8468 1.7793 -1.7072Q1.6486 -1.5676 1.482 -1.4279Q1.5541 -1.0856 1.6171 -0.6982Q2.036 -0.6982 2.2973 -0.4369Q2.5631 -0.1712 2.5631 0.2613Q2.5631 0.6081 2.3941 0.8559Q2.2252 1.1036 1.9414 1.2207Q1.973 1.4324 1.9887 1.6194Q2.0045 1.8063 2.0045 1.9775Q2.0045 2.4279 1.795 2.6306Q1.5856 2.8333 1.2432 2.8333Q0.9099 2.8333 0.7117 2.6396Q0.5135 2.4414 0.5135 2.2117Q0.509 2.009 0.6239 1.8784Q0.7387 1.7477 0.9279 1.7477Q1.1171 1.7477 1.2207 1.8649Q1.3243 1.982 1.3243 2.1532Q1.3243 2.2477 1.2883 2.3221Q1.2523 2.3964 1.1892 2.4437Q1.1261 2.491 1.045 2.5068Q0.964 2.5225 0.8694 2.5Q0.9865 2.6712 1.2523 2.6712Q1.5495 2.6712 1.7005 2.4955Q1.8514 2.3198 1.8514 1.982Q1.8514 1.8243 1.8356 1.6486Q1.8198 1.473 1.7928 1.2703Q1.6351 1.3108 1.4595 1.3108Q1.1441 1.3108 0.8784 1.2252Q0.6126 1.1396 0.4167 0.9707Q0.2207 0.8018 0.1104 0.5541Q0 0.3063 0 -0.018ZM1.6667 0.482Q1.6171 0.1486 1.5586 -0.1757Q1.3514 -0.1757 1.214 -0.0495Q1.0766 0.0766 1.0766 0.2928Q1.0766 0.4324 1.1464 0.5405Q1.2162 0.6486 1.3423 0.7117Q1.3243 0.7613 1.3108 0.7973Q1.1081 0.7432 0.9595 0.5721Q0.8108 0.4009 0.8108 0.0991Q0.8108 -0.2297 1.045 -0.464Q1.2252 -0.6351 1.4685 -0.6847Q1.3829 -1.1306 1.3423 -1.3153Q1.1577 -1.1667 0.9842 -1.0068Q0.8108 -0.8468 0.6757 -0.6712Q0.5405 -0.4955 0.4595 -0.2973Q0.3784 -0.0991 0.3784 0.1306Q0.3784 0.3874 0.464 0.5743Q0.5495 0.7613 0.7005 0.8829Q0.8514 1.0045 1.0541 1.0631Q1.2568 1.1216 1.491 1.1216Q1.6396 1.1216 1.7613 1.0856Q1.7117 0.7883 1.6667 0.482ZM1.3829 -2.0495Q1.7342 -2.3063 1.8941 -2.5518Q2.0541 -2.7973 2.0541 -3.0586Q2.0541 -3.1847 1.9955 -3.2793Q1.9369 -3.3739 1.8243 -3.3739Q1.6126 -3.3739 1.4865 -3.0721Q1.3604 -2.7793 1.3604 -2.3514Q1.3604 -2.2117 1.3829 -2.0495ZM2.2568 0.4054Q2.2568 0.2793 2.2095 0.1712Q2.1622 0.0631 2.0856 -0.0135Q2.009 -0.0901 1.9099 -0.1329Q1.8108 -0.1757 1.7072 -0.1757Q1.7523 0.036 1.8018 0.3514Q1.8468 0.6396 1.9009 1.027Q2.0946 0.9234 2.1757 0.7477Q2.2568 0.5721 2.2568 0.4054Z";
+
+  /* The tail is lengthened to reach for the bottom line: Apple's F clef
+     stops well short of it. A smooth quadratic taper stretches everything
+     below Y0=0.40 only, so the head, the top of the clef and the two dots
+     keep the positions they already had. */
+  var F_CLEF_D = "M1.0077 -1.0769Q1.2615 -1.0769 1.4679 -0.9859Q1.6744 -0.8949 1.8205 -0.7321Q1.9667 -0.5692 2.0462 -0.3449Q2.1256 -0.1205 2.1256 0.1462Q2.1256 0.3308 2.091 0.5081Q2.0564 0.6938 1.9923 0.8739Q1.9282 1.0618 1.841 1.2419Q1.7538 1.4285 1.6462 1.5999Q1.5462 1.7628 1.4218 1.9142Q1.2974 2.0693 1.1615 2.2059Q1.0256 2.3453 0.8872 2.4586Q0.7487 2.5738 0.6205 2.6575Q0.4923 2.7419 0.3846 2.7875Q0.2769 2.8333 0.2026 2.8333Q0.1487 2.8333 0.1487 2.7657Q0.1487 2.726 0.1705 2.7024Q0.1923 2.679 0.2256 2.6593Q0.5846 2.4321 0.8718 2.0927Q1.159 1.7696 1.3487 1.3575Q1.4846 1.083 1.5577 0.7821Q1.6308 0.5015 1.6308 0.1974Q1.6308 -0.0103 1.5821 -0.2Q1.5333 -0.3897 1.4372 -0.5359Q1.341 -0.6821 1.2 -0.7679Q1.059 -0.8538 0.8769 -0.8538Q0.7872 -0.8538 0.6974 -0.8256Q0.6077 -0.7974 0.5333 -0.7436Q0.459 -0.6897 0.4103 -0.6103Q0.3615 -0.5308 0.3564 -0.4282Q0.4 -0.4487 0.4551 -0.4615Q0.5103 -0.4744 0.5872 -0.4744Q0.6744 -0.4744 0.7513 -0.4436Q0.8282 -0.4128 0.8859 -0.3538Q0.9436 -0.2949 0.9782 -0.2103Q1.0128 -0.1256 1.0128 -0.0179Q1.0128 0.2026 0.8808 0.3244Q0.7487 0.4465 0.5231 0.4465Q0.4179 0.4465 0.3231 0.4103Q0.2282 0.3744 0.1564 0.3013Q0.0846 0.2282 0.0423 0.1167Q0 0.0051 0 -0.1436Q0 -0.3333 0.0756 -0.5026Q0.1513 -0.6718 0.2859 -0.8Q0.4205 -0.9282 0.6051 -1.0026Q0.7897 -1.0769 1.0077 -1.0769ZM2.3538 -0.5Q2.3538 -0.4103 2.4154 -0.3487Q2.4769 -0.2872 2.5667 -0.2872Q2.6564 -0.2872 2.7192 -0.3487Q2.7821 -0.4103 2.7821 -0.5Q2.7821 -0.5897 2.7192 -0.6526Q2.6564 -0.7154 2.5667 -0.7154Q2.4769 -0.7154 2.4154 -0.6526Q2.3538 -0.5897 2.3538 -0.5ZM2.3538 0.5026Q2.3538 0.5923 2.4154 0.6538Q2.4769 0.7154 2.5667 0.7154Q2.6564 0.7154 2.7192 0.6538Q2.7821 0.5923 2.7821 0.5026Q2.7821 0.4128 2.7192 0.35Q2.6564 0.2872 2.5667 0.2872Q2.4769 0.2872 2.4154 0.35Q2.3538 0.4128 2.3538 0.5026Z";
+
+  /* Placing the treble clef. Two shortcuts lie about where its spiral is:
+     the glyph's leftmost point sits on the clef's outer sweep, not on the
+     spiral, and the spiral's counter is a crescent cut in two by the stem,
+     so its bounding box is off by a third of a staff space. The honest
+     measure is the centroid of the enclosed void inside the spiral - the
+     white space a reader sees as the middle of the circle. Rasterising the
+     filled glyph puts it G_CLEF_VOID below the anchor.
+
+     The two knobs below are independent on purpose. LIFT is where the
+     spiral sits relative to the G line, in staff spaces, and 0 would centre
+     it exactly. SCALE resizes the clef around that spiral, so changing the
+     size never drags the spiral off the position you picked. */
+  var G_CLEF_VOID  = 0.166;   // measured, do not tune: spiral void below the anchor
+  var G_CLEF_SCALE = 0.92;    // 1 = full size, lower is smaller
+  var G_CLEF_LIFT  = 0.194;   // staff spaces the spiral rides above the G line
+
+  function clef(d, x, y, k) {
+    return el("path", {
+      "class": "clef", d: d,
+      transform: "translate(" + x + "," + y + ") scale(" + SPACE * (k || 1) + ")"
+    });
+  }
+
+  /* ---------------- the note ---------------- */
+
+  /* Ledgers only where the note actually needs them. */
+  function ledgersFor(i) {
+    var out = [];
+    if (i === MIDDLE_C) out.push(MIDDLE_C);
+    for (var a = 26; a <= i; a += 2) out.push(a);          // above the treble staff
+    for (var b = 2;  b >= i; b -= 2) out.push(b);          // below the bass staff
+    return out;
+  }
+
+  /* Stem points away from the middle line of whichever staff the note is on. */
+  function stemUp(i) { return i >= MIDDLE_C ? i < 20 : i < 8; }
+
+  function drawNote() {
+    while (noteL.firstChild) noteL.removeChild(noteL.firstChild);
+
+    var y = stepToY(step);
+
+    ledgersFor(step).forEach(function (i) {
+      noteL.appendChild(line(NOTE_X - 23, stepToY(i), NOTE_X + 23, stepToY(i), "ledger"));
+    });
+
+    var head = el("ellipse", {
+      "class": "note", cx: NOTE_X, cy: y, rx: 14.5, ry: 10.5,
+      transform: "rotate(-21 " + NOTE_X + " " + y + ")"
+    });
+    noteL.appendChild(head);
+    noteL.appendChild(stemUp(step)
+      ? line(NOTE_X + 13, y - 3, NOTE_X + 13, y - 3.5 * SPACE, "stem")
+      : line(NOTE_X - 13, y + 3, NOTE_X - 13, y + 3.5 * SPACE, "stem"));
+
+    var t = el("text", { "class": "label", x: LABEL_X, y: y });
+    t.textContent = nameOf(step);
+    noteL.appendChild(t);
+  }
+
+  /* ---------------- audio ---------------- */
+
+  var audio = null, master = null, voice = null;
+
+  function ensureAudio() {
+    if (audio) return;
+    var AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return;
+    audio = new AC();
+    master = audio.createGain();
+    master.gain.value = 0.9;
+    master.connect(audio.destination);
+  }
+
+  function release(t) {
+    if (!voice) return;
+    var g = voice.gain.gain;
+    try { g.cancelAndHoldAtTime(t); }
+    catch (e) { g.cancelScheduledValues(t); g.setValueAtTime(Math.max(g.value, 0.0001), t); }
+    g.exponentialRampToValueAtTime(0.0001, t + 0.12);
+    voice.oscs.forEach(function (o) { try { o.stop(t + 0.14); } catch (e) {} });
+    voice = null;
+  }
+
+  /* A struck tone: stacked partials, fast attack, and a lowpass that
+     closes as it decays. The closing filter is most of what separates
+     "piano" from "beep". */
+  var PARTIALS = [[1, 1.00], [2, 0.42], [3, 0.22], [4, 0.12], [6, 0.05]];
+
+  function play(freq) {
+    ensureAudio();
+    if (!audio) return;
+    if (audio.state === "suspended") audio.resume();
+
+    var t = audio.currentTime;
+    release(t);
+
+    var g = audio.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.linearRampToValueAtTime(0.16, t + 0.006);
+    g.gain.exponentialRampToValueAtTime(0.0006, t + 1.6);
+
+    var filt = audio.createBiquadFilter();
+    filt.type = "lowpass";
+    filt.Q.value = 0.4;
+    filt.frequency.setValueAtTime(Math.min(freq * 9, 11000), t);
+    filt.frequency.exponentialRampToValueAtTime(Math.max(freq * 2.2, 200), t + 1.1);
+
+    filt.connect(g);
+    g.connect(master);
+
+    var oscs = PARTIALS.map(function (p) {
+      var o = audio.createOscillator(), pg = audio.createGain();
+      o.type = "sine";
+      /* a touch of inharmonicity, which real strings have and pure sines don't */
+      o.frequency.value = freq * p[0] * (1 + 0.0007 * p[0] * p[0]);
+      pg.gain.value = p[1];
+      o.connect(pg); pg.connect(filt);
+      o.start(t); o.stop(t + 1.8);
+      return o;
+    });
+
+    voice = { gain: g, oscs: oscs };
+  }
+
+  /* ---------------- state ---------------- */
+
+  function render() {
+    var y = stepToY(step);
+    handle.style.top = y + "px";
+    drawNote();
+    track.setAttribute("aria-valuenow", step);
+    track.setAttribute("aria-valuetext", nameOf(step));
+    paper.setAttribute("aria-label", "Staff, " + nameOf(step));
+  }
+
+  function setStep(i, sound) {
+    var next = clamp(Math.round(i), 0, TOP);
+    if (next === step) return;
+    step = next;
+    render();
+    if (sound !== false) play(freqOf(midiOf(step)));
+  }
+
+  /* ---------------- dragging ---------------- */
+
+  /* Both surfaces share stepToY, so they share its inverse too. */
+  function attachDrag(node) {
+    var dragging = false;
+
+    function fromEvent(e) {
+      return yToStep(e.clientY - node.getBoundingClientRect().top);
+    }
+
+    node.addEventListener("pointerdown", function (e) {
+      dragging = true;
+      node.setPointerCapture(e.pointerId);
+      track.focus();
+      var next = clamp(Math.round(fromEvent(e)), 0, TOP);
+      if (next === step) play(freqOf(midiOf(step)));   // re-strike the same note
+      else setStep(next);
+      e.preventDefault();
+    });
+
+    node.addEventListener("pointermove", function (e) {
+      if (dragging) setStep(fromEvent(e));
+    });
+
+    function end(e) {
+      if (!dragging) return;
+      dragging = false;
+      try { node.releasePointerCapture(e.pointerId); } catch (err) {}
+    }
+    node.addEventListener("pointerup", end);
+    node.addEventListener("pointercancel", end);
+  }
+
+  track.addEventListener("keydown", function (e) {
+    if      (e.key === "ArrowUp")   setStep(step + 1);
+    else if (e.key === "ArrowDown") setStep(step - 1);
+    else if (e.key === "PageUp")    setStep(step + 7);
+    else if (e.key === "PageDown")  setStep(step - 7);
+    else if (e.key === "Home")      setStep(0);
+    else if (e.key === "End")       setStep(TOP);
+    else return;
+    e.preventDefault();
+  });
+
+  drawTicks();
+  drawStaff();
+  attachDrag(track);
+  attachDrag(paper);
+  render();
+
+  window.setStep = setStep;   // for verification from the console
+})();
+</script>
