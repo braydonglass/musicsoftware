@@ -53,7 +53,7 @@ CLEAN_CORPUS = [
 
 class TestRealize(unittest.TestCase):
     def setUp(self):
-        self.profile = Profile.load("kostka_payne")
+        self.profile = Profile.load("strict")
 
     def realize(self, key_text, progression, k=1):
         key = Key.parse(key_text)
@@ -179,7 +179,7 @@ class TestCLI(unittest.TestCase):
         self.assertIn("no violations", out)
 
     def test_rules_listing(self):
-        code, out, _ = self.run_cli(["rules", "--profile", "kostka_payne"])
+        code, out, _ = self.run_cli(["rules", "--profile", "strict"])
         self.assertEqual(code, 0)
         self.assertIn("parallel_perfect", out)
         self.assertIn("transition rules", out)

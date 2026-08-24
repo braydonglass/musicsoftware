@@ -943,14 +943,14 @@
       .then(function (data) { return data.profiles || []; })
       .catch(function () { return []; })
       .then(function (names) {
-        if (!names.length) names = ["kostka_payne"];
+        if (!names.length) names = ["strict"];
         names.forEach(function (name) {
           var option = document.createElement("option");
           option.value = name;
           option.textContent = name.replace(/_/g, " ");
           select.appendChild(option);
         });
-        select.value = names.indexOf("kostka_payne") >= 0 ? "kostka_payne" : names[0];
+        select.value = names.indexOf("strict") >= 0 ? "strict" : names[0];
       });
   }
 

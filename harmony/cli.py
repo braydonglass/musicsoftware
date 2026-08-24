@@ -3,7 +3,7 @@
     harmony realize --key "C major" --meter 4/4 --progression "I IV V I"
     harmony check   --key "C major" --progression "I IV V I" \
                     --soprano "..." --alto "..." --tenor "..." --bass "..."
-    harmony rules   --profile kostka_payne
+    harmony rules   --profile strict
 
 Meter is parsed and carried, and goes no further. It exists for notation
 later and for the cadential six-four's strong-beat test. If meter ever
@@ -28,7 +28,7 @@ from .core.rules.registry import REGISTRY, Profile
 from .core.solver import NoRealization, solve
 from .core.voice import VOICE_NAMES
 
-DEFAULT_PROFILE = "kostka_payne"
+DEFAULT_PROFILE = "strict"
 _METER_RE = re.compile(r"^(\d+)\s*/\s*(\d+)$")
 
 

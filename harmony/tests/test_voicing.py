@@ -12,7 +12,7 @@ from harmony.core.voicing import generate
 
 class TestVoicingGeneration(unittest.TestCase):
     def setUp(self):
-        self.profile = Profile.load("kostka_payne")
+        self.profile = Profile.load("strict")
         self.C = Key.parse("C major")
         self.c = Key.parse("c minor")
 

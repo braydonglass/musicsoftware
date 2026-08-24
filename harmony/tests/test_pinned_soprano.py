@@ -30,7 +30,7 @@ class TestParseSopranoHoles(unittest.TestCase):
 class TestPartlyPinnedRealization(unittest.TestCase):
     def setUp(self):
         self.key = Key.parse("C major")
-        self.profile = Profile.load("kostka_payne")
+        self.profile = Profile.load("strict")
 
     def realize(self, progression, melody_text):
         specs = parse_progression(progression, self.key)

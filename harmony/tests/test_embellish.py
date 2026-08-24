@@ -60,7 +60,7 @@ def _v(soprano, alto, tenor, bass):
 class TestOpportunities(unittest.TestCase):
     def setUp(self):
         self.key = Key.parse("C major")
-        self.profile = Profile.load("kostka_payne")
+        self.profile = Profile.load("strict")
 
     def offered(self, voicings, progression):
         specs = parse_progression(progression, self.key)
@@ -133,13 +133,21 @@ class TestOpportunities(unittest.TestCase):
 
 
 class TestApply(unittest.TestCase):
-    """Placing the passing tones a writer has chosen."""
+    """Placing the passing tones a writer has chosen.
+
+    The voicings are written out rather than solved for. What is being
+    tested is how a chosen tone is placed, which must not change when a
+    profile starts preferring a different realization - and it did, which
+    is how these tests came to be written this way.
+    """
 
     def setUp(self):
         self.key = Key.parse("C major")
-        self.profile = Profile.load("kostka_payne")
-        self.specs = parse_progression("I IV V I", self.key)
-        self.voicings = solve(self.specs, self.key, self.profile)[0].voicings
+        self.profile = Profile.load("strict")
+        self.specs = parse_progression("I IV", self.key)
+        # soprano E5-C5 and tenor C4-A3 are both thirds, and the two
+        # passing tones are legal together
+        self.voicings = [_v("E5", "G4", "C4", "C3"), _v("C5", "A4", "A3", "F3")]
 
     def place(self, chosen):
         return apply(self.voicings, self.specs, self.key, self.profile, chosen)
@@ -148,13 +156,13 @@ class TestApply(unittest.TestCase):
         events, refused = self.place([])
         self.assertEqual(refused, [])
         self.assertEqual([e.voicing for e in events], self.voicings)
-        self.assertEqual([e.beats for e in events], [1.0] * 4)
-        self.assertEqual([e.passing for e in events], [()] * 4)
+        self.assertEqual([e.beats for e in events], [1.0] * 2)
+        self.assertEqual([e.passing for e in events], [()] * 2)
 
     def test_a_chosen_tone_splits_its_beat_in_half(self):
         events, refused = self.place([(0, "soprano")])
         self.assertEqual(refused, [])
-        self.assertEqual(len(events), 5)
+        self.assertEqual(len(events), 3)
         self.assertEqual([e.beats for e in events[:2]], [0.5, 0.5])
         self.assertEqual(events[0].voicing, self.voicings[0])
         self.assertEqual(events[1].passing, ("soprano",))
@@ -174,14 +182,14 @@ class TestApply(unittest.TestCase):
         """Both passing tones sound together; the beat splits once, not twice."""
         events, refused = self.place([(0, "soprano"), (0, "tenor")])
         self.assertEqual(refused, [])
-        self.assertEqual(len(events), 5)
+        self.assertEqual(len(events), 3)
         self.assertEqual(set(events[1].passing), {"soprano", "tenor"})
 
 
 class TestApplyRefuses(unittest.TestCase):
     def setUp(self):
         self.key = Key.parse("C major")
-        self.profile = Profile.load("kostka_payne")
+        self.profile = Profile.load("strict")
 
     def test_a_tone_the_rules_forbid_is_not_placed(self):
         specs = parse_progression("I V", self.key)

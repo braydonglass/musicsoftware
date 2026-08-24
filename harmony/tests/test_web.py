@@ -13,8 +13,8 @@ from harmony.web.server import candidates_payload, midi_for, realize_payload
 
 class TestOpportunitiesInThePayload(unittest.TestCase):
     def payload(self, **kwargs):
-        request = {"key_text": "C major", "progression": "I IV V I",
-                   "profile_name": "kostka_payne", "alternates": 1}
+        request = {"key_text": "C major", "progression": "I vi IV V I",
+                   "profile_name": "strict", "alternates": 1}
         request.update(kwargs)
         return realize_payload(**request)
 
@@ -26,13 +26,13 @@ class TestOpportunitiesInThePayload(unittest.TestCase):
 
     def test_an_undecorated_result_is_one_whole_beat_per_chord(self):
         result = self.payload()["results"][0]
-        self.assertEqual([e["beats"] for e in result["events"]], [1, 1, 1, 1])
+        self.assertEqual([e["beats"] for e in result["events"]], [1, 1, 1, 1, 1])
 
     def test_a_chosen_passing_tone_splits_its_beat(self):
         offers = self.payload()["results"][0]["opportunities"]
         free = [o for o in offers if not o["refusedBy"]][0]
         result = self.payload(passing=[[free["chord"], free["voice"]]])["results"][0]
-        self.assertEqual(len(result["events"]), 5)
+        self.assertEqual(len(result["events"]), 6)
         self.assertEqual([e["beats"] for e in result["events"][:2]], [0.5, 0.5])
         self.assertEqual(result["events"][1]["passing"], [free["voice"]])
 
@@ -47,7 +47,7 @@ class TestOpportunitiesInThePayload(unittest.TestCase):
 
 class TestPartlyPinnedMelody(unittest.TestCase):
     def test_a_melody_shorter_than_the_progression_is_accepted(self):
-        payload = realize_payload("C major", "I IV V I", "kostka_payne", 1,
+        payload = realize_payload("C major", "I IV V I", "strict", 1,
                                   soprano_text="E5 F5")
         self.assertTrue(payload["ok"])
         sopranos = [c["soprano"]["name"] for c in payload["results"][0]["chords"]]
@@ -55,27 +55,27 @@ class TestPartlyPinnedMelody(unittest.TestCase):
 
     def test_candidates_reports_a_hole_instead_of_crashing(self):
         payload = candidates_payload(
-            {"key": "C major", "soprano": "E5 _ D5", "profile": "kostka_payne"})
+            {"key": "C major", "soprano": "E5 _ D5", "profile": "strict"})
         self.assertTrue(payload["ok"])
         self.assertEqual([n["note"] for n in payload["notes"]], ["E5", "_", "D5"])
         self.assertEqual(payload["notes"][1]["options"], [])
 
 
 class TestMidiExport(unittest.TestCase):
-    BASE = {"key": "C major", "progression": "I IV V I", "profile": "kostka_payne"}
+    BASE = {"key": "C major", "progression": "I vi IV V I", "profile": "strict"}
 
     def test_the_exported_file_carries_the_chosen_passing_tones(self):
         plain, _ = midi_for(dict(self.BASE))
-        decorated, _ = midi_for(dict(self.BASE, passing="0:soprano"))
+        decorated, _ = midi_for(dict(self.BASE, passing="0:bass"))
         self.assertNotEqual(plain, decorated)
         self.assertGreater(len(decorated), len(plain))
 
     def test_the_file_is_named_after_the_key_and_progression(self):
         _, stem = midi_for(dict(self.BASE))
-        self.assertEqual(stem, "c-major-i-iv-v-i")
+        self.assertEqual(stem, "c-major-i-vi-iv-v-i")
 
     def test_an_unavailable_choice_is_ignored_rather_than_fatal(self):
         """A stale click must not break the download."""
         plain, _ = midi_for(dict(self.BASE))
-        stale, _ = midi_for(dict(self.BASE, passing="0:bass"))
+        stale, _ = midi_for(dict(self.BASE, passing="0:soprano"))
         self.assertEqual(plain, stale)

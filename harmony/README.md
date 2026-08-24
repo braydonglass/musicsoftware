@@ -149,9 +149,23 @@ Rules are data. `profiles/*.json` decides which are enabled, at what
 severity, and at what cost. No rule logic lives in a profile and no profile
 value is hardcoded in a rule.
 
-One profile ships: `kostka_payne`. An inner-voice leading tone may be
-frustrated, the German sixth's fifths are permitted, and every rule that
-polices perfect consonances is on.
+One profile ships: `strict`. The leading tone resolves in every voice, the
+German sixth's fifths are refused, and hidden fifths, fourths and octaves are
+policed in all six pairs whenever the upper voice leaps.
+
+It used to be `kostka_payne`, and it carried that textbook's two leniencies:
+a leading tone could be frustrated in an inner voice, and the German sixth's
+fifths were permitted. Both were parameters, so removing them changed no rule
+logic — which is the point of keeping rules as data.
+
+One setting had to move the other way to make that work. `hidden_perfect_leap`
+was `"none"`, meaning any similar approach to a perfect interval counted,
+which is stricter than any textbook; combined with a leading tone that must
+resolve everywhere it left `I V/V V I` with no realization at all. It is now
+`"upper"`, the classical condition — the fault is the upper voice *leaping*
+into the perfect interval. The result still refuses more than the old profile
+did: 6.67% of the transitions in a two-key sweep survive it against 7.25%
+before.
 
 `harmony rules --profile NAME` prints what is active, which is the honest
 way to answer what a profile does — a prose table describing one drifts from
@@ -247,11 +261,14 @@ tone, so the next profile cannot reintroduce it.
   suspensions and anticipations sit on the strong half of a beat, and knowing
   which half is strong needs meter - the same requirement that keeps `I64`
   out.
-- The German sixth resolving straight to V produces parallel fifths. The
-  shipped profile permits them (`german_sixth_fifths: "allow"`) and reports
-  them as an exception with the reason; set it to `"forbid"` to refuse them.
-  Textbooks that refuse them expect a cadential six-four in between, which is
-  not implemented.
+- The German sixth resolving straight to V produces parallel fifths in the
+  obvious voicing, and the shipped profile refuses them
+  (`german_sixth_fifths: "forbid"`). This constrains the voicing rather than
+  forbidding the progression: `i iv Ger+6 V` in C minor still realizes
+  cleanly, because the solver finds a spacing where the fifths do not arise.
+  Set the parameter to `"allow"` to permit the ordinary voicing, and the
+  fifths come back reported as an exception with the reason practice
+  accepts them.
 - `citation` is empty on every rule, deliberately. A wrong citation is worse
   than none, and the doubling defaults want checking against a specific
   edition before any of this text is shown to students.

@@ -27,7 +27,7 @@ def voicing(s, a, t, b):
 
 class BrokenCorpus(unittest.TestCase):
     def setUp(self):
-        self.profile = Profile.load("kostka_payne")
+        self.profile = Profile.load("strict")
 
     def errors(self, key, progression, voicings):
         k = Key.parse(key)
@@ -194,34 +194,49 @@ class BrokenCorpus(unittest.TestCase):
         self.assertIn("applied leading tone", waived[0].reason)
         self.assertEqual(errors_only(graded), [], [str(e) for e in errors_only(graded)])
 
-    def test_frustrated_leading_tone_depends_on_which_voice(self):
-        """Outer voices must resolve; an inner voice may be frustrated.
+    def test_a_frustrated_leading_tone_is_a_fault_in_every_voice(self):
+        """The leniency the shipped profile used to carry, and no longer does.
 
-        The packet is explicit: a leading tone leaping away from the tonic is
-        a fault in the soprano or bass, where it is most audible, and allowed
-        in an inner voice.
+        A leading tone leaping away from the tonic was permitted in an inner
+        voice, on the grounds that it is where the ear notices it least and
+        that it lets the chord which follows keep all four members. The
+        profile now lists all four voices in leading_tone_outer_voices, so
+        an inner voice is judged exactly like an outer one and the excuse is
+        no longer available to anybody.
         """
         key = Key.parse("C major")
         specs = parse_progression("V I", key)
         # alto B3 drops a third to G3, scale degree 5, completing the tonic
-        voicings = [voicing("G4", "B3", "D3", "G2"), voicing("E4", "G3", "E3", "C3")]
+        inner = [voicing("G4", "B3", "D3", "G2"), voicing("E4", "G3", "E3", "C3")]
+        graded = check(inner, specs, key, self.profile)
 
-        graded = check(voicings, specs, key, Profile.load("kostka_payne"))
-
+        self.assertIn("leading_tone_resolution",
+                      [e.rule_id for e in errors_only(graded)],
+                      "a frustrated leading tone in an inner voice is now a fault")
         self.assertEqual(
-            [e.rule_id for e in errors_only(graded)], [],
-            f"kostka_payne excuses the frustrated leading tone: "
-            f"{[str(e) for e in errors_only(graded)]}")
-        waived = [v for v in exceptions_only(graded)
-                  if v.rule_id == "leading_tone_resolution"]
-        self.assertTrue(waived, "and reports it rather than staying silent")
-        self.assertTrue(waived[0].reason, "a waived rule must say why")
-        # the same leap in the soprano is a fault, whatever the profile
+            [], [v for v in exceptions_only(graded)
+                 if v.rule_id == "leading_tone_resolution"],
+            "and it is no longer reported as an exception")
+
+        # the same leap in the soprano, which was always a fault
         outer = [voicing("B4", "G4", "D4", "G2"), voicing("G4", "E4", "C4", "C3")]
         self.assertTrue(
             any(e.rule_id == "leading_tone_resolution"
                 for e in errors_only(check(outer, specs, key, self.profile))),
             "a frustrated leading tone in the soprano is still a fault")
+
+    def test_a_leading_tone_stepping_down_is_not_frustration(self):
+        """Unchanged by the stricter profile, and worth keeping so.
+
+        What the rule polices is leaping away from the tonic. Descending by
+        step is a different move and is allowed in any voice.
+        """
+        key = Key.parse("C major")
+        specs = parse_progression("V I", key)
+        # tenor B3 steps down to A3 rather than leaping
+        stepped = [voicing("D5", "G4", "B3", "G2"), voicing("C5", "G4", "A3", "F3")]
+        errs = errors_only(check(stepped, specs, key, self.profile))
+        self.assertNotIn("leading_tone_resolution", [e.rule_id for e in errs])
 
 
 if __name__ == "__main__":

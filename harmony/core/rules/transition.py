@@ -296,8 +296,9 @@ def voice_overlap(ctx: TransitionContext) -> list[Violation]:
     rule_id="leading_tone_resolution",
     scope="transition", severity="error", cost=math.inf, category="resolution",
     explanation=("The leading tone of a V or vii\u00b0 rises to the tonic. It is "
-                 "frustrated when it leaps away instead - a fault in an outer "
-                 "voice, where it is most audible, and permitted in an inner one. "
+                 "frustrated when it leaps away instead. Which voices that is a "
+                 "fault in is the profile's to say, in leading_tone_outer_voices; "
+                 "elsewhere it is reported as an exception with the reason. "
                  "Moving down by step is not frustration and is allowed anywhere."),
 )
 def leading_tone_resolution(ctx: TransitionContext) -> list[Violation]:
@@ -487,8 +488,10 @@ def augmented_sixth_resolution(ctx: TransitionContext) -> list[Violation]:
 @register(
     rule_id="hidden_perfect",
     scope="transition", severity="error", cost=math.inf, category="voice_leading",
-    explanation=("Approaching a perfect fifth or octave by similar motion, with "
-                 "the upper voice leaping, exposes the perfect interval."),
+    explanation=("Approaching a perfect interval by similar motion exposes it. "
+                 "Which intervals count, which pairs are watched and how much of "
+                 "a leap it takes are the profile's to say - the fourth in "
+                 "particular is a consonance between upper voices and is opt-in."),
 )
 def hidden_perfect(ctx: TransitionContext) -> list[Violation]:
     scope = ctx.profile.param("hidden_perfect_pairs", "outer")

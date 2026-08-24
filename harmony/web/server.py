@@ -59,7 +59,7 @@ def candidates_payload(request: dict) -> dict:
     not break the chord chips underneath it.
     """
     key = Key.parse(request.get("key", "C major"))
-    profile = Profile.load(request.get("profile", "kostka_payne"))
+    profile = Profile.load(request.get("profile", "strict"))
     melody = parse_soprano(request.get("soprano", ""))
     return {
         "ok": True,
@@ -97,7 +97,7 @@ def midi_for(params: dict) -> tuple[bytes, str]:
     what was on screen rather than the undecorated chords underneath it.
     """
     key = Key.parse(params.get("key") or "C major")
-    profile = Profile.load(params.get("profile") or "kostka_payne")
+    profile = Profile.load(params.get("profile") or "strict")
     progression = params.get("progression") or ""
     specs = parse_progression(progression, key)
     index = max(0, int(params.get("alt") or 0))
@@ -263,7 +263,7 @@ class Handler(BaseHTTPRequestHandler):
             payload = realize_payload(
                 key_text=request.get("key", "C major"),
                 progression=request.get("progression", ""),
-                profile_name=request.get("profile", "kostka_payne"),
+                profile_name=request.get("profile", "strict"),
                 alternates=int(request.get("alternates", 1)),
                 soprano_text=request.get("soprano", "") or "",
                 passing=request.get("passing") or [],

@@ -1,6 +1,6 @@
 {
-  "name": "kostka_payne",
-  "description": "Default. A frustrated leading tone is permitted in an inner voice; the German sixth's fifths are allowed and reported with their reason; every rule policing perfect consonances is on, in all six pairs.",
+  "name": "strict",
+  "description": "The leading tone resolves in every voice, the German sixth's fifths are refused, and hidden fifths, fourths and octaves are policed in all six pairs whenever the upper voice leaps.",
   "ranges": {
     "soprano": [
       "C4",
@@ -21,10 +21,10 @@
   },
   "params": {
     "hidden_perfect_pairs": "all",
-    "german_sixth_fifths": "allow",
+    "german_sixth_fifths": "forbid",
     "unequal_fifths": "all",
     "consecutive_perfects_pairs": "all",
-    "hidden_perfect_leap": "none",
+    "hidden_perfect_leap": "upper",
     "hidden_perfect_intervals": [
       4,
       5,
@@ -42,6 +42,8 @@
     "parallel_fourths_with_bass_only": false,
     "leading_tone_outer_voices": [
       "soprano",
+      "alto",
+      "tenor",
       "bass"
     ],
     "hidden_fourth_pairs": "all",
@@ -66,12 +68,12 @@
     "doubled_tendency_tone": {
       "enabled": true,
       "severity": "warning",
-      "cost": 8.0
+      "cost": 14.0
     },
     "incomplete_chord": {
       "enabled": true,
       "severity": "warning",
-      "cost": 4.0
+      "cost": 7.0
     },
     "parallel_perfect": {
       "enabled": true,
@@ -101,7 +103,7 @@
     "large_leap": {
       "enabled": true,
       "severity": "style",
-      "cost": 1.0
+      "cost": 1.5
     },
     "leap_recovery": {
       "enabled": true,
@@ -141,7 +143,7 @@
     "voice_unison": {
       "enabled": true,
       "severity": "warning",
-      "cost": 3.0
+      "cost": 8.0
     },
     "consecutive_perfects": {
       "enabled": true,
@@ -151,7 +153,7 @@
     "doubled_leading_tone": {
       "enabled": true,
       "severity": "warning",
-      "cost": 10.0
+      "cost": 18.0
     },
     "doubling_preference": {
       "enabled": true,
