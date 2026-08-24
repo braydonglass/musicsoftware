@@ -15,8 +15,12 @@ from harmony.cli import main
 from harmony.core.checker import check, errors_only
 from harmony.core.key import Key
 from harmony.core.roman import parse_progression
-from harmony.core.rules.registry import Profile
+from harmony.core.rules.registry import PROFILE_DIR, Profile
 from harmony.core.solver import NoRealization, realize, solve
+
+def shipped_profiles():
+    return sorted(path.stem for path in PROFILE_DIR.glob("*.json"))
+
 
 CLEAN_CORPUS = [
     ("C major", "I IV V I"),
@@ -89,7 +93,8 @@ class TestRealize(unittest.TestCase):
         self.assertLessEqual(results[0].cost, results[-1].cost)
 
     def test_every_profile_realizes_and_grades_consistently(self):
-        for name in ("kostka_payne", "strict_pedagogical", "linear"):
+        """Whatever profiles ship, not a list that can go stale."""
+        for name in shipped_profiles():
             with self.subTest(profile=name):
                 profile = Profile.load(name)
                 key = Key.parse("C major")

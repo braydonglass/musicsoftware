@@ -15,7 +15,7 @@ from harmony.core.checker import check, errors_only, exceptions_only
 from harmony.core.key import Key
 from harmony.core.pitch import Pitch
 from harmony.core.roman import parse_progression
-from harmony.core.rules.registry import Profile
+from harmony.core.rules.registry import PROFILE_DIR, Profile
 from harmony.core.voice import Voicing
 
 P = Pitch.parse
@@ -119,15 +119,15 @@ class BrokenCorpus(unittest.TestCase):
     def test_no_profile_may_drop_the_leading_tone(self):
         """The bug that motivated the rule.
 
-        `linear` priced chord completeness at zero, which let the solver omit
-        the third of V - and the third of a dominant is the leading tone. A
-        preference a profile may zero must never be the thing holding an
-        essential tone in place.
+        A profile once priced chord completeness at zero, which let the
+        solver omit the third of V - and the third of a dominant is the
+        leading tone. A preference a profile may zero must never be the
+        thing holding an essential tone in place.
         """
         from harmony.core.solver import realize
         key = Key.parse("d minor")
         specs = parse_progression("i V i", key)
-        for name in ("kostka_payne", "strict_pedagogical", "linear"):
+        for name in sorted(path.stem for path in PROFILE_DIR.glob("*.json")):
             with self.subTest(profile=name):
                 result = realize(specs, key, Profile.load(name))[0]
                 chromas = {p.pitch_class.chroma for p in result.voicings[1].pitches}
@@ -207,7 +207,6 @@ class BrokenCorpus(unittest.TestCase):
         voicings = [voicing("G4", "B3", "D3", "G2"), voicing("E4", "G3", "E3", "C3")]
 
         graded = check(voicings, specs, key, Profile.load("kostka_payne"))
-        strict = errors_only(check(voicings, specs, key, Profile.load("strict_pedagogical")))
 
         self.assertEqual(
             [e.rule_id for e in errors_only(graded)], [],

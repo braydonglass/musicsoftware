@@ -149,13 +149,17 @@ Rules are data. `profiles/*.json` decides which are enabled, at what
 severity, and at what cost. No rule logic lives in a profile and no profile
 value is hardcoded in a rule.
 
-| Profile | Character |
-|---|---|
-| `kostka_payne` | Default. Inner-voice leading tones may be frustrated; hidden fifths policed between outer voices only. |
-| `strict_pedagogical` | Leading tones always resolve; hidden fifths policed in all six pairs; unequal fifths (d5 to P5) refused. |
-| `linear` | Doubling preference zeroed, voice-leading costs raised. Approximates Aldwell/Schachter. |
+One profile ships: `kostka_payne`. An inner-voice leading tone may be
+frustrated, the German sixth's fifths are permitted, and every rule that
+polices perfect consonances is on.
 
-`harmony rules --profile NAME` prints what is active.
+`harmony rules --profile NAME` prints what is active, which is the honest
+way to answer what a profile does — a prose table describing one drifts from
+the JSON the moment either is edited, and this one did.
+
+To make another, copy the file and change what you want; anything dropped
+falls back to the rule's registered default, and `--profile` also takes a
+path, so a profile does not have to live in `profiles/` to be used.
 
 ## Design commitments
 
@@ -186,15 +190,15 @@ is stored spelled. But it is not nothing either, and textbooks split on it:
 `P5 -> d5` is universally accepted, `d5 -> P5` less so, and many texts refuse
 it only when the bass is one of the two voices.
 
-So it is the `unequal_fifths` rule, off by default. To catch it:
+So it is its own rule, `unequal_fifths`, which ships enabled and hard:
 
 ```json
 "unequal_fifths": { "enabled": true, "severity": "error", "cost": "inf" }
 ```
 
-The `unequal_fifths` parameter takes `"all"` or `"with_bass"`, the latter
-narrowing it to pairs involving the bass. `strict_pedagogical` has it on and
-set to `"all"`.
+Set `"enabled": false` for the permissive reading. The `unequal_fifths`
+parameter takes `"all"` or `"with_bass"`, the latter narrowing it to pairs
+involving the bass; the shipped profile uses `"all"`.
 
 ### And the same for fourths
 
@@ -224,9 +228,11 @@ not. The third carries a chord's quality, the seventh its function, and a
 dominant's third *is* the leading tone — so those are a hard rule no profile
 can switch off, and only the fifth is ever expendable.
 
-This distinction exists because it was got wrong once. `linear` priced chord
-completeness at zero, which quietly let the solver drop the third of V and
-realize `i V i` in D minor with no C-sharp anywhere.
+This distinction exists because it was got wrong once. A profile priced
+chord completeness at zero, which quietly let the solver drop the third of V
+and realize `i V i` in D minor with no C-sharp anywhere. A test now realizes
+that progression under every profile on disk and looks for the leading
+tone, so the next profile cannot reintroduce it.
 
 ## Known limits
 
@@ -241,10 +247,11 @@ realize `i V i` in D minor with no C-sharp anywhere.
   suspensions and anticipations sit on the strong half of a beat, and knowing
   which half is strong needs meter - the same requirement that keeps `I64`
   out.
-- The German sixth resolving straight to V produces parallel fifths.
-  `kostka_payne` and `linear` permit them, `strict_pedagogical` refuses
-  them; textbooks that refuse them expect a cadential six-four in between,
-  which is not implemented.
+- The German sixth resolving straight to V produces parallel fifths. The
+  shipped profile permits them (`german_sixth_fifths: "allow"`) and reports
+  them as an exception with the reason; set it to `"forbid"` to refuse them.
+  Textbooks that refuse them expect a cadential six-four in between, which is
+  not implemented.
 - `citation` is empty on every rule, deliberately. A wrong citation is worse
   than none, and the doubling defaults want checking against a specific
   edition before any of this text is shown to students.

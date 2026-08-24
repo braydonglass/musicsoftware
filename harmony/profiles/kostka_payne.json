@@ -1,6 +1,6 @@
 {
   "name": "kostka_payne",
-  "description": "Default. Frustrated leading tone permitted in inner voices; hidden perfect intervals policed between the outer voices only.",
+  "description": "Default. A frustrated leading tone is permitted in an inner voice; the German sixth's fifths are allowed and reported with their reason; every rule policing perfect consonances is on, in all six pairs.",
   "ranges": {
     "soprano": [
       "C4",
