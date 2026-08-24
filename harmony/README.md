@@ -207,6 +207,41 @@ on it being one pair: the same strictness across all six costs nine of the
 twenty-four progressions, while here the cadence simply arrives by contrary
 motion instead — the soprano falling to the tonic as the bass rises.
 
+## What this profile refuses, and what that costs
+
+A perfect fourth, fifth or octave reached by similar motion is a fault in
+every pair, at every compound, and however the voices approach it. No leap is
+required and no pair is exempt. `hidden_perfect_leap` also accepts `"upper"`
+(the classical condition), `"either"` and `"excuse"` — the last reports the
+stepwise case as an exception carrying its reason and lets `waived_cost` price
+it, rather than refusing it outright.
+
+This is the strictest setting and it is not free. Seven of the twenty-four
+progressions in the clean corpus can no longer be written **as typed**:
+
+```
+C major   I IV V I            a minor   i iv V i
+C major   I vi IV V I         a minor   i VI iv V i
+C major   I V7/IV IV V I      c minor   i VI iv V i
+C major   I V/vi vi IV V I
+```
+
+`I IV V I` is among them, so the landing page falls back to re-voicing and
+says so — `V` comes back as `V65`. That fallback is the designed behaviour for
+a progression with no answer as written, and it is also how a real loss of
+capability disappears from a test suite: `solve()` re-voices, so a corpus test
+built on it stays green regardless. `ThePriceOfStrictness` in
+`tests/test_realize.py` therefore uses `realize()`, which does not fall back,
+and pins that exact list. Changing what the profile refuses now means changing
+that set on purpose.
+
+The reason the cost cannot be avoided is structural. `IV` and `V` have roots a
+step apart, so their upper voices are obliged to move together, and some inner
+pair lands on a fourth or an octave. Clean voicings of `IV` to `V` exist in
+isolation — 210 of 3600 — but none of them connects to a legal chord before and
+a legal `V` to `I` after. Refusing the fourth forces the octave; refusing both
+leaves nothing.
+
 ## Three voices moving together
 
 The interval rules each judge one pair after the fact. `similar_motion` is

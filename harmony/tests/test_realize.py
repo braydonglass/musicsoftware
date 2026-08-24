@@ -202,3 +202,51 @@ class TestCLI(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ThePriceOfStrictness(unittest.TestCase):
+    """What refusing every direct interval costs, recorded rather than hidden.
+
+    solve() falls back to re-voicing when a progression has no answer as
+    written, so the clean-corpus test above stays green while the engine
+    quietly substitutes chords. That is the designed behaviour, and it is
+    also how a real loss of capability disappears from a test suite. This
+    uses realize(), which does not fall back, so the cost is written down
+    and any change to it has to be looked at on purpose.
+    """
+
+    UNWRITABLE_AS_TYPED = {
+        ("C major", "I IV V I"),
+        ("C major", "I vi IV V I"),
+        ("C major", "I V7/IV IV V I"),
+        ("C major", "I V/vi vi IV V I"),
+        ("a minor", "i iv V i"),
+        ("a minor", "i VI iv V i"),
+        ("c minor", "i VI iv V i"),
+    }
+
+    def test_the_price_of_refusing_every_direct_interval(self):
+        from harmony.core.solver import realize
+        profile = Profile.load("strict")
+        unwritable = set()
+        for key_text, progression in CLEAN_CORPUS:
+            key = Key.parse(key_text)
+            specs = parse_progression(progression, key)
+            try:
+                realize(specs, key, profile)
+            except NoRealization:
+                unwritable.add((key_text, progression))
+        self.assertEqual(
+            unwritable, self.UNWRITABLE_AS_TYPED,
+            "the set of progressions this profile refuses has changed; if that "
+            "was on purpose, update UNWRITABLE_AS_TYPED and say why")
+
+    def test_what_cannot_be_written_is_still_answered(self):
+        """A refusal is not a crash: solve() re-voices, and says that it did."""
+        key = Key.parse("C major")
+        specs = parse_progression("I IV V I", key)
+        profile = Profile.load("strict")
+        result = solve(specs, key, profile)[0]
+        self.assertTrue(result.substitutions(specs),
+                        "the engine substituted nothing and said nothing")
+        self.assertEqual(len(result.voicings), len(specs))

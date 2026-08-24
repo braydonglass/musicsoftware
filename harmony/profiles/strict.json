@@ -1,6 +1,6 @@
 {
   "name": "strict",
-  "description": "A perfect fourth, fifth or octave reached by similar motion is a fault in every pair and at every compound - an eleventh is a fourth, a twelfth a fifth. Between inner voices a stepping upper part is excused and priced rather than forbidden. The leading tone resolves in the outer voices and may fall only to the fifth in an inner one; the German sixth excuses the unequal fifth it forces.",
+  "description": "A perfect fourth, fifth or octave reached by similar motion is a fault in every pair, at every compound and however the voices approach it - no leap is required and no excuse is offered. The leading tone resolves in the outer voices and may fall only to the fifth in an inner one; the German sixth excuses the unequal fifth it forces.",
   "ranges": {
     "soprano": [
       "C4",
@@ -24,7 +24,7 @@
     "german_sixth_fifths": "forbid",
     "unequal_fifths": "all",
     "consecutive_perfects_pairs": "all",
-    "hidden_perfect_leap": "excuse",
+    "hidden_perfect_leap": "none",
     "hidden_perfect_intervals": [
       4,
       5,

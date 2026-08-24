@@ -117,19 +117,19 @@ class BrokenCorpus(unittest.TestCase):
         self.assert_single(errs, "hidden_perfect", ["soprano", "tenor"])
         self.assertIn("fourth", errs[0].message)
 
-    def test_a_direct_octave_reached_by_step_is_still_allowed(self):
-        """V to I, which is what the single switch used to cost.
+    def test_a_direct_octave_reached_by_step_is_a_fault_too(self):
+        """No exemption anywhere, which is a choice with a recorded price.
 
         Alto B3 steps to C4 over a bass leaping G2 to C3, arriving at an
-        octave by similar motion. The upper voice does not leap, so the
-        classical condition leaves it alone - and it has to, or there is no
-        authentic cadence to write.
+        octave by similar motion. The classical condition would excuse this
+        because the upper voice steps; this profile does not, and what that
+        costs is written down in ThePriceOfStrictness.
         """
         errs = self.errors("C major", "V I", [
             voicing("G4", "B3", "D3", "G2"),
             voicing("G4", "C4", "E3", "C3"),
         ])
-        self.assertEqual([], [e for e in errs if e.rule_id == "hidden_perfect"])
+        self.assertIn("hidden_perfect", [e.rule_id for e in errs])
 
     def test_a_direct_octave_between_the_outer_voices_is_a_fault(self):
         """The cadence the engine used to write.
@@ -147,14 +147,14 @@ class BrokenCorpus(unittest.TestCase):
         ])
         self.assert_single(errs, "hidden_perfect", ["soprano", "bass"])
 
-    def test_the_same_octave_between_inner_voices_is_left_alone(self):
-        """Alto and tenor, stepping into an octave, with nothing above or
-        below them exposed. Forbidding this costs nine of the corpus."""
+    def test_an_inner_direct_octave_is_a_fault_as_well(self):
+        """Alto and tenor stepping into an octave, nothing above or below
+        them exposed. Policed all the same: no pair is exempt."""
         errs = self.errors("C major", "IV V", [
             voicing("C5", "A4", "C4", "F3"),
             voicing("B4", "G4", "G3", "G3"),
         ])
-        self.assertEqual([], [e for e in errs if e.rule_id == "hidden_perfect"])
+        self.assertIn("hidden_perfect", [e.rule_id for e in errs])
 
     def test_three_voices_moving_together_is_reported(self):
         """The shape that produces the faults, priced rather than forbidden.
