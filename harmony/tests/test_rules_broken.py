@@ -311,88 +311,58 @@ class BrokenCorpus(unittest.TestCase):
         self.assertIn("applied leading tone", waived[0].reason)
         self.assertEqual(errors_only(graded), [], [str(e) for e in errors_only(graded)])
 
-    def test_a_frustrated_leading_tone_is_a_fault_in_every_voice(self):
-        """The leniency the shipped profile used to carry, and no longer does.
+    def test_the_leading_tone_must_resolve_in_an_outer_voice(self):
+        """Strictest where the ear follows most.
 
-        A leading tone leaping away from the tonic was permitted in an inner
-        voice, on the grounds that it is where the ear notices it least and
-        that it lets the chord which follows keep all four members. The
-        profile now lists all four voices in leading_tone_outer_voices, so
-        an inner voice is judged exactly like an outer one and the excuse is
-        no longer available to anybody.
+        The soprano's B falls to G, the fifth of the tonic. That figure is
+        excused in an inner voice and never in an outer one.
         """
         key = Key.parse("C major")
         specs = parse_progression("V I", key)
-        # alto B3 drops a third to G3, scale degree 5, completing the tonic
-        inner = [voicing("G4", "B3", "D3", "G2"), voicing("E4", "G3", "E3", "C3")]
-        graded = check(inner, specs, key, self.profile)
-
-        self.assertIn("leading_tone_resolution",
-                      [e.rule_id for e in errors_only(graded)],
-                      "a frustrated leading tone in an inner voice is now a fault")
-        self.assertEqual(
-            [], [v for v in exceptions_only(graded)
-                 if v.rule_id == "leading_tone_resolution"],
-            "and it is no longer reported as an exception")
-
-        # the same leap in the soprano, which was always a fault
-        outer = [voicing("B4", "G4", "D4", "G2"), voicing("G4", "E4", "C4", "C3")]
-        self.assertTrue(
-            any(e.rule_id == "leading_tone_resolution"
-                for e in errors_only(check(outer, specs, key, self.profile))),
-            "a frustrated leading tone in the soprano is still a fault")
-
-    def test_the_shipped_profile_excuses_no_leading_tone_anywhere(self):
-        """Applied ones included. Strictness here turned out to be free.
-
-        A secondary dominant commits every voice at once, which is why
-        waiver_for excuses the fifth it opens, and for a while the applied
-        leading tone was excused with it. That excuse was only ever the
-        price of policing hidden intervals on stepwise motion, and that
-        setting cost the authentic cadence, so both were given up together.
-        """
-        key = Key.parse("C major")
-        specs = parse_progression("V/V V", key)
-        # the tenor's F# drops to D rather than rising to G
-        voicings = [voicing("D4", "A3", "F#3", "D3"),
-                    voicing("D4", "B3", "D3", "G2")]
+        voicings = [voicing("B4", "G4", "D4", "G2"),
+                    voicing("G4", "E4", "C4", "C3")]
         errs = errors_only(check(voicings, specs, key, self.profile))
         self.assertIn("leading_tone_resolution", [e.rule_id for e in errs])
 
-    def test_a_profile_may_still_excuse_an_applied_leading_tone(self):
-        """The rule holds the mechanism; the profile holds the policy.
+    def test_an_inner_leading_tone_may_fall_to_the_fifth(self):
+        """7 to 5 in an alto or tenor, which is the sanctioned figure.
 
-        Nothing ships using this, but the engine must be able to say it -
-        the alternative is rule logic that no profile can reach, which is
-        the thing profiles exist to prevent.
+        It exists to avoid parallel fifths or to let the resolving chord
+        keep all four members, so it is reported with its reason rather
+        than passed over, and priced rather than free.
         """
         key = Key.parse("C major")
-        specs = parse_progression("V/V V", key)
-        voicings = [voicing("D4", "A3", "F#3", "D3"),
-                    voicing("D4", "B3", "D3", "G2")]
+        specs = parse_progression("V I", key)
+        # alto B3 drops a third to G3, the fifth of the tonic
+        voicings = [voicing("G4", "B3", "D3", "G2"),
+                    voicing("E4", "G3", "E3", "C3")]
+        graded = check(voicings, specs, key, self.profile)
 
-        lenient = Profile.load("strict")
-        lenient.params = dict(lenient.params,
-                              applied_leading_tone_voices=["soprano", "bass"])
-        graded = check(voicings, specs, key, lenient)
-
-        self.assertEqual([], errors_only(graded))
+        self.assertEqual([], [e for e in errors_only(graded)
+                              if e.rule_id == "leading_tone_resolution"])
         waived = [v for v in exceptions_only(graded)
                   if v.rule_id == "leading_tone_resolution"]
-        self.assertTrue(waived, "and reported rather than passed over in silence")
-        self.assertIn("secondary dominant", waived[0].reason)
+        self.assertTrue(waived, "excused, but not in silence")
+        self.assertIn("fifth", waived[0].reason)
 
-    def test_an_applied_leading_tone_in_the_soprano_is_still_a_fault(self):
-        """Even where a profile excuses the inner voices."""
+    def test_an_inner_leading_tone_may_not_leap_anywhere_else(self):
+        """The excuse is for 7 falling to 5 and for nothing else.
+
+        Here the alto leaps up to the third of the tonic instead, which is
+        not the figure practice sanctions, so it stays a fault even in an
+        inner voice.
+        """
         key = Key.parse("C major")
-        specs = parse_progression("V/V V", key)
-        voicings = [voicing("F#4", "A3", "D3", "D3"),
-                    voicing("D4", "B3", "D3", "G2")]
-        lenient = Profile.load("strict")
-        lenient.params = dict(lenient.params,
-                              applied_leading_tone_voices=["soprano", "bass"])
-        errs = errors_only(check(voicings, specs, key, lenient))
+        specs = parse_progression("V I", key)
+        voicings = [voicing("G4", "B3", "D3", "G2"),
+                    voicing("G4", "E4", "C4", "C3")]
+        errs = errors_only(check(voicings, specs, key, self.profile))
         self.assertIn("leading_tone_resolution", [e.rule_id for e in errs])
+
+    def test_the_shipped_profile_prices_the_inner_voice_excuse(self):
+        """"Occasionally, if required" is a price, not a free pass."""
+        self.assertGreater(
+            Profile.load("strict").waived_cost_of("leading_tone_resolution"), 0)
 
     def test_a_leading_tone_stepping_down_is_not_frustration(self):
         """Unchanged by the stricter profile, and worth keeping so.

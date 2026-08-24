@@ -1,6 +1,6 @@
 {
   "name": "strict",
-  "description": "The leading tone resolves in every voice, applied ones included, the German sixth's fifths are refused, parallel fifths and fourths are refused whatever their quality, a direct fourth is a fault however approached and a direct fifth or octave between the outer voices likewise, three voices moving together is priced, and the excuses that remain are charged for so the search takes them only where nothing else will do.",
+  "description": "A perfect fourth, fifth or octave reached by similar motion is a fault in every pair and at every compound - an eleventh is a fourth, a twelfth a fifth. Between inner voices a stepping upper part is excused and priced rather than forbidden. The leading tone resolves in the outer voices and may fall only to the fifth in an inner one; the German sixth excuses the unequal fifth it forces.",
   "ranges": {
     "soprano": [
       "C4",
@@ -24,7 +24,7 @@
     "german_sixth_fifths": "forbid",
     "unequal_fifths": "all",
     "consecutive_perfects_pairs": "all",
-    "hidden_perfect_leap": "upper",
+    "hidden_perfect_leap": "excuse",
     "hidden_perfect_intervals": [
       4,
       5,
@@ -42,16 +42,12 @@
     "parallel_fourths_with_bass_only": false,
     "leading_tone_outer_voices": [
       "soprano",
-      "alto",
-      "tenor",
       "bass"
     ],
     "hidden_fourth_pairs": "all",
     "unequal_fourths": "all",
     "applied_leading_tone_voices": [
       "soprano",
-      "alto",
-      "tenor",
       "bass"
     ],
     "hidden_fourth_leap": "none",
@@ -103,7 +99,8 @@
     "leading_tone_resolution": {
       "enabled": true,
       "severity": "error",
-      "cost": "inf"
+      "cost": "inf",
+      "waived_cost": 25.0
     },
     "seventh_resolution": {
       "enabled": true,

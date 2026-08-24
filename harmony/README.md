@@ -218,11 +218,21 @@ many voices count as too many; the cost sits deliberately just below
 a worse outcome than a texture which merely invites trouble.
 
 `applied_leading_tone_voices` says the same thing for a secondary dominant's
-applied leading tone, which `waiver_for` already excuses the fifth of. The
-shipped profile holds it to the same standard as any other leading tone, since
-strictness there turned out to cost nothing. The parameter exists so that a
-profile can decide it, rather than the rule deciding on every profile's
-behalf.
+applied leading tone, which `waiver_for` already excuses the fifth of.
+
+Both are set to the soprano and the bass, which is where the rule is strictest
+and where it belongs. The leading tone pulls a half step to the tonic and an
+outer voice must take it. An inner voice may instead let it fall to the *fifth*
+of the chord it was resolving into — 7 down to 5 — and only that: any other
+leap away is a fault wherever it happens. The figure earns its place by
+avoiding parallel fifths or keeping the resolving chord complete, which is
+occasional rather than routine, so it carries a `waived_cost` and the search
+reaches for it only where it must.
+
+This was got wrong here once in the other direction. Holding the leading tone
+in all four voices sounds stricter and reads stricter, and it costs six of the
+twenty-four corpus progressions the moment direct intervals are policed
+seriously — because the two constraints compete for the same room.
 
 `harmony rules --profile NAME` prints what is active, which is the honest
 way to answer what a profile does — a prose table describing one drifts from
@@ -286,9 +296,15 @@ soprano on `D5` and the tenor on `A3` writes `D5/A3` — a perfect fourth —
 straight into `E5/Bb3`, a tritone. Two fourths on the staff, moving together.
 
 It takes the same `"all"` or `"with_bass"` parameter as `unequal_fifths` and
-consults the same waiver, so a diminished chord or a secondary dominant
-excuses it for the same stated reason and it is reported as an exception
-rather than a fault.
+consults the same waiver, so a diminished chord, a secondary dominant or an
+augmented sixth excuses it for the same stated reason and it is reported as an
+exception rather than a fault.
+
+The augmented sixth belongs in that list for the reason the chord exists: both
+of its outer tones are obliged to move outward by semitone at once, and
+honouring them is what forces the fifth. Practice breaks the unequal fifth
+there rather than leave a tendency tone hanging, and the chord it resolves into
+inherits the same problem.
 
 ### And the case between them
 

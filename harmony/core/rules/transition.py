@@ -32,6 +32,13 @@ def waiver_for(spec) -> str:
                 "seventh must fall. Both obligations point the same way, and "
                 "honouring them is what opens the interval. Leaving a tendency "
                 "tone unresolved would be the worse fault.")
+    if spec.aug6_type is not None:
+        return ("An augmented sixth drives both of its outer tones outward by "
+                "semitone at once - the lowered sixth down, the raised fourth "
+                "up - and holding those two resolutions is what forces the "
+                "fifth. The chord it resolves into inherits the same problem. "
+                "Practice breaks the unequal fifth here rather than leave a "
+                "tendency tone hanging.")
     if spec.quality == "diminished":
         return ("Every note of a diminished chord is a tendency tone, so every "
                 "voice is already committed to a step and there is no spare "
@@ -390,16 +397,22 @@ def leading_tone_resolution(ctx: TransitionContext) -> list[Violation]:
         if -2 <= step < 0:
             continue
 
-        frustrated_but_inner = name not in outer
-        # A secondary dominant states its own reason through waiver_for, so
-        # the chord is excused by one account rather than two.
+        # The excuse an inner voice gets is narrow and specific: the leading
+        # tone may fall to the fifth of the chord it was resolving into, and
+        # only that. Any other leap away is a fault wherever it happens. The
+        # figure exists to avoid parallel fifths or to keep the resolving
+        # chord complete, which is why it is priced rather than free - the
+        # profile's waived_cost decides how badly the search wants to avoid it.
+        falls_to_fifth = there.pitch_class == _fifth_above(tonic)
+        frustrated_but_inner = name not in outer and falls_to_fifth
         excuse = ""
         if frustrated_but_inner:
             excuse = waiver_for(spec) or (
-                "A frustrated leading tone in an inner voice is allowed - it "
-                "is where the ear notices it least, and it lets the chord "
-                "that follows keep all four members. In the soprano or bass "
-                "it would still be a fault.")
+                "A leading tone in an inner voice may fall to the fifth of the "
+                "chord it resolves into. It is where the ear notices it least, "
+                "and it is what lets that chord keep all four members or the "
+                "voices avoid parallel fifths. In the soprano or bass, and for "
+                "any other leap away, it is still a fault.")
         out.append(Violation(
             "leading_tone_resolution", [name], ctx.index,
             f"the leading tone {here} in the {name} leaps to {there} instead of "
@@ -666,12 +679,29 @@ def hidden_perfect(ctx: TransitionContext) -> list[Violation]:
             leap = ctx.profile.param("hidden_outer_leap", leap)
         upper_leap = abs(ctx.b[upper].midi - ctx.a[upper].midi) > 2
         lower_leap = abs(ctx.b[lower].midi - ctx.a[lower].midi) > 2
+        #   "excuse" - no leap required, but a stepwise approach is reported
+        #              as an exception rather than a fault. The edge survives
+        #              and waived_cost prices it, which is how a profile says
+        #              "avoid this wherever anything else will do". Forbidding
+        #              it outright between the inner pairs costs seven of the
+        #              twenty-four corpus progressions, the authentic cadence
+        #              among them; excusing it costs none, and the engine
+        #              still takes it only where there is no alternative.
+        excused_by_step = False
         if leap == "upper" and not upper_leap:
             continue
         if leap == "either" and not (upper_leap or lower_leap):
             continue
+        if leap == "excuse" and not upper_leap:
+            excused_by_step = True
         name = {4: "fourth", 5: "fifth", 8: "octave"}[simple.generic]
         excuse = waiver_for(ctx.spec_a)
+        if not excuse and excused_by_step:
+            excuse = (f"The upper voice steps into this {name} rather than "
+                      f"leaping to it, which is the classical excuse, and "
+                      f"between inner voices it stands. Priced rather than "
+                      f"free: the search takes it only where no other voicing "
+                      f"will do.")
         out.append(Violation(
             "hidden_perfect", [upper, lower], ctx.index,
             f"hidden {name}: {upper} moves to {ctx.b[upper]} in similar motion "
