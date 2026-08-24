@@ -261,7 +261,10 @@
   <div class="hint">
     Triads and sevenths in any inversion (<code>I6</code>, <code>V65</code>),
     secondary dominants (<code>V/V</code>, <code>vii&#176;7/V</code>),
-    diminished sevenths (<code>vii&#176;7</code>), and augmented sixths
+    diminished sevenths (<code>vii&#176;7</code>), augmented triads
+    (<code>III+</code>, <code>V+</code>), chords borrowed from the parallel
+    mode (<code>&#9837;VI</code>, <code>&#9837;III</code>,
+    <code>&#9837;VII</code>), and augmented sixths
     (<code>It+6</code>, <code>Fr+6</code>, <code>Ger+6</code>).
     Stems up are soprano and tenor; stems down are alto and bass.
     Also the Neapolitan (<code>N6</code>). Write a melody to harmonize it: every
@@ -955,7 +958,8 @@
   }
 
   /* insert buttons for the characters a keyboard hides */
-  [["°", "diminished"], ["ø", "half diminished"], ["♭", "flat"],
+  [["°", "diminished, as in vii°"], ["ø", "half diminished, as in viiø7"],
+   ["+", "augmented, as in III+"], ["♭", "borrowed, as in ♭VI"],
    ["/", "secondary, as in V/V"], ["N6", "Neapolitan"]].forEach(function (pair) {
     var b = document.createElement("button");
     b.type = "button";

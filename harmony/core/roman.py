@@ -33,7 +33,8 @@ SEVENTH_FIGURES = {"7": 0, "65": 1, "43": 2, "42": 3, "2": 3}
 
 # 65|64|43|42|2|7|6 - longest figures first so "V65" is not read as "V6"
 _TOKEN_RE = re.compile(
-    r"^(?P<numeral>[IViv]+)(?P<mark>°|o|\+|ø)?(?P<figure>65|64|43|42|2|7|6)?$"
+    r"^(?P<flat>\u266d|b)?(?P<numeral>[IViv]+)(?P<mark>°|o|\+|ø)?"
+    r"(?P<figure>65|64|43|42|2|7|6)?$"
 )
 
 
@@ -145,6 +146,7 @@ def _parse_simple(token: str, key: Key, allow_chromatic: bool = False) -> ChordS
     numeral = match.group("numeral")
     mark = match.group("mark") or ""
     figure = match.group("figure") or ""
+    flat = bool(match.group("flat"))
 
     upper = numeral.upper()
     if upper not in ROMAN_TO_DEGREE:
@@ -179,6 +181,23 @@ def _parse_simple(token: str, key: Key, allow_chromatic: bool = False) -> ChordS
     # lowercase vii is one; an uppercase VII is the natural-seventh chord.
     raise_seventh = key.mode == "minor" and degree == 7 and not is_upper
     root_pc = key.scale_degree(degree, raised=raise_seventh)
+
+    if flat:
+        # Borrowed from the parallel mode. The root drops a semitone and keeps
+        # its letter: the sixth degree of C is A, so its borrowed form is
+        # A-flat and never G-sharp. Deriving the letter from the new chroma
+        # instead is exactly the mistake spelled pitch exists to prevent.
+        if key.mode == "minor" and degree in (3, 6, 7):
+            raise RomanNumeralError(
+                f"{token!r}: scale degree {degree} of {key} is already lowered, "
+                f"so flattening it again would ask for a double flat. In a minor "
+                f"key write {numeral} on its own."
+            )
+        if root_pc.alteration - 1 < -2:
+            raise RomanNumeralError(
+                f"{token!r} would need a triple flat in {key}"
+            )
+        root_pc = PitchClass(root_pc.letter, root_pc.alteration - 1)
 
     third_semitones, fifth_semitones = TRIAD_STRUCTURES[quality]
     tones = [
@@ -226,7 +245,9 @@ def _parse_simple(token: str, key: Key, allow_chromatic: bool = False) -> ChordS
     # mark is the writer being deliberate, and deliberate chords are allowed
     # their chromatic tones: a fully diminished seventh in a major key borrows
     # the flat sixth by definition, so vii°7 in C major must spell A-flat.
-    if not allow_chromatic and not mark:
+    # A quality mark and a flat are both explicit requests for a tone outside
+    # the key, so neither is asked to justify itself to the diatonic check.
+    if not allow_chromatic and not mark and not flat:
         _reject_chromatic_tones(tones, key, degree, token)
 
     leading_tone_pc = next((pc for pc in tones if pc == key.leading_tone), None)

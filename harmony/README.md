@@ -132,11 +132,22 @@ changes.
 | Diatonic triads, all inversions | `I ii iii IV V vi vii°`, `I6`, `V64` |
 | Sevenths, all inversions | `V7 V65 V43 V42 ii7 IV7` |
 | Diminished sevenths | `vii°7`, `viiø7` |
+| Augmented triads | `III+`, `V+`, `I+` — the `+` raises the fifth |
+| Borrowed from the parallel mode | `♭VI`, `♭III`, `♭VII` (plain `b` works too) |
 | Secondary dominants | `V/V V7/V vii°7/V V/ii V/vi V7/IV` |
 | Augmented sixths | `It+6 Fr+6 Ger+6` (also `It6`, `Ger65`, `Fr43`) |
 
-Not implemented: the Neapolitan, the cadential six-four, and modal mixture
-beyond what an explicit quality mark requests.
+A flat before the numeral lowers the root a semitone and keeps its letter:
+the sixth degree of C is A, so `♭VI` is A-flat major and never G-sharp. That
+is also why it is refused in a minor key, where the third, sixth and seventh
+are lowered already and flattening one again would ask for a double flat.
+
+A quality mark and a flat are both explicit requests for a tone outside the
+key, so neither is put to the diatonic check that refuses a bare `vii` in C
+major for needing an F-sharp.
+
+Not implemented: the cadential six-four, and mixture beyond what a flat or a
+quality mark asks for.
 
 `I64` is refused on purpose. The cadential six-four is a dominant-function
 chord wearing tonic clothing, and grading it properly needs a strong-beat
