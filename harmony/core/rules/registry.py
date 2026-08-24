@@ -80,6 +80,9 @@ class Rule:
     check: Callable
     explanation: str
     citation: str = ""
+    # What a profile charges for a violation this rule has excused. Zero
+    # means an excuse is free, which is what waiving has always meant.
+    waived_cost: float = 0.0
 
     @property
     def is_hard(self) -> bool:
@@ -150,6 +153,21 @@ class Profile:
             return math.inf
         return float(raw)
 
+    def waived_cost_of(self, rule_id: str) -> float:
+        """What this profile charges for a fault it has excused.
+
+        Zero by default: a waived violation is reported with its reason and
+        costs nothing, which is how the engine has always read a waiver.
+        Pricing one says something different and useful - the excuse is a
+        last resort. The edge stays legal, so nothing becomes unwritable,
+        but the search will take any alternative that avoids it and pay
+        only where there is none.
+        """
+        raw = self.setting(rule_id).get("waived_cost", 0.0)
+        if isinstance(raw, str) and raw.lower() in ("inf", "infinity"):
+            return math.inf
+        return float(raw or 0.0)
+
     def param(self, name: str, default=None):
         return self.params.get(name, default)
 
@@ -164,6 +182,7 @@ class Profile:
             out.append(Rule(
                 id=rule.id, scope=rule.scope,
                 severity=self.severity_of(rule_id), cost=self.cost_of(rule_id),
+                waived_cost=self.waived_cost_of(rule_id),
                 category=rule.category, check=rule.check,
                 explanation=rule.explanation, citation=rule.citation,
             ))
@@ -189,6 +208,14 @@ def _apply(rules, ctx, short_circuit: bool = True) -> tuple[list[Violation], flo
             if not violation.waived:
                 violation.severity = rule.severity
             violations.append(violation)
+
+        # An excused violation is not a fault, but a profile may price it.
+        # This is where "allowed only when nothing else will do" is said:
+        # the edge survives and gets expensive, so the search prefers any
+        # path without it and pays only where there is no alternative.
+        excused = [v for v in found if v.waived]
+        if excused and rule.waived_cost and not math.isinf(cost):
+            cost += rule.waived_cost * sum(v.weight for v in excused)
 
         binding = [v for v in found if not v.waived]
         if not binding:

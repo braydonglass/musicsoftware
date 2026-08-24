@@ -14,8 +14,13 @@ import unittest
 from harmony.core.checker import check, errors_only, exceptions_only
 from harmony.core.key import Key
 from harmony.core.pitch import Pitch
-from harmony.core.roman import parse_progression
-from harmony.core.rules.registry import PROFILE_DIR, Profile
+from harmony.core.roman import parse, parse_progression
+from harmony.core.rules.registry import (
+    PROFILE_DIR,
+    Profile,
+    TransitionContext,
+    evaluate_transition,
+)
 from harmony.core.voice import Voicing
 
 P = Pitch.parse
@@ -312,6 +317,65 @@ class BrokenCorpus(unittest.TestCase):
         stepped = [voicing("D5", "G4", "B3", "G2"), voicing("C5", "G4", "A3", "F3")]
         errs = errors_only(check(stepped, specs, key, self.profile))
         self.assertNotIn("leading_tone_resolution", [e.rule_id for e in errs])
+
+
+class WaivedFaultsMayBePriced(unittest.TestCase):
+    """An excused fault is free only if the profile says it is.
+
+    Waiving says "this is not a fault", not "this costs nothing to
+    prefer". Left free, the search picks an excused voicing as readily as
+    a clean one, because both edges cost the same. Pricing the excuse is
+    how a profile says: take anything else that works, and reach for this
+    only when nothing else will.
+    """
+
+    def edge(self, **settings):
+        key = Key.parse("C major")
+        sa, sb = parse("vii°6", key), parse("I", key)
+        # vii°6 to I with a diminished fifth moving to a perfect one, which
+        # waiver_for excuses because every note of a diminished chord is
+        # already committed to a step
+        a = voicing("F4", "B3", "D3", "D3")
+        b = voicing("G4", "C4", "E3", "C3")
+        profile = Profile.load("strict")
+        if settings:
+            profile.settings = dict(
+                profile.settings,
+                unequal_fifths={**profile.setting("unequal_fifths"), **settings})
+        rules = [r for r in profile.rules("transition") if r.id == "unequal_fifths"]
+        return evaluate_transition(
+            TransitionContext(a=a, b=b, spec_a=sa, spec_b=sb, key=key, index=0,
+                              profile=profile), rules, short_circuit=False)
+
+    def test_an_excused_fault_is_free_when_priced_at_nothing(self):
+        """The mechanism, stated without reference to what ships."""
+        found, cost = self.edge(waived_cost=0.0)
+        self.assertTrue([v for v in found if v.waived])
+        self.assertEqual(cost, 0.0)
+
+    def test_the_shipped_profile_puts_a_price_on_its_excuses(self):
+        """The policy, pinned separately from the mechanism.
+
+        Left free, an excused edge and a clean one cost the same and the
+        search has no reason to prefer the clean one. Realizing the corpus
+        produced three excused faults before these were priced and none
+        after, so every one of them had an alternative all along.
+        """
+        profile = Profile.load("strict")
+        for rule_id in ("unequal_fifths", "unequal_fourths",
+                        "hidden_perfect", "parallel_perfect"):
+            with self.subTest(rule=rule_id):
+                self.assertGreater(profile.waived_cost_of(rule_id), 0)
+
+    def test_a_profile_may_put_a_price_on_the_excuse(self):
+        found, cost = self.edge(waived_cost=40.0)
+        self.assertTrue([v for v in found if v.waived],
+                        "still reported as an exception, not turned into a fault")
+        self.assertEqual(cost, 40.0)
+
+    def test_pricing_the_excuse_does_not_make_it_a_violation(self):
+        found, _ = self.edge(waived_cost=40.0)
+        self.assertEqual([], errors_only(found))
 
 
 if __name__ == "__main__":

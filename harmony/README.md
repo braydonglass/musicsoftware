@@ -270,6 +270,36 @@ rather than counted. Two diminished fifths in a row are two fifths in a row.
 Closing it cost nothing — every progression in the clean corpus still writes
 as typed.
 
+## What an excuse costs
+
+A waived violation says "this is not a fault, and here is why". It used to
+also say "and it costs nothing to prefer", which is a different claim and not
+one anybody made on purpose. Left free, an excused edge and a clean edge cost
+the same, so the search picked between them on other grounds — and an excuse
+meant for the case where nothing else works was being taken where something
+else worked perfectly well.
+
+`waived_cost` is what a profile charges for its own excuse:
+
+```json
+"unequal_fifths": { "enabled": true, "severity": "error", "cost": "inf",
+                    "waived_cost": 40 }
+```
+
+The edge stays legal, so nothing becomes unwritable and the violation is still
+reported as an exception carrying its reason. It just gets expensive, which is
+how this engine says *only where there is no alternative*. The shipped profile
+prices `unequal_fifths`, `unequal_fourths`, `hidden_perfect` and
+`parallel_perfect` at 40, well above any ordinary preference.
+
+The effect is worth recording. Before pricing, realizing the clean corpus
+produced three excused faults; after, it produces none — in every case a clean
+voicing existed and the engine simply had no reason to prefer it. All
+twenty-four progressions still write as typed.
+
+`"waived_cost": "inf"` withdraws the excuse altogether, which is also how a
+profile reaches the waivers in `waiver_for` that it could not otherwise touch.
+
 
 ## Preferences a profile may zero, and facts it may not
 

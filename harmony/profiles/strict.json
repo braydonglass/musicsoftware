@@ -1,6 +1,6 @@
 {
   "name": "strict",
-  "description": "The leading tone resolves in every voice, applied ones included, the German sixth's fifths are refused, and a perfect fifth, fourth or octave approached by similar motion with the upper voice leaping is a fault in all six pairs.",
+  "description": "The leading tone resolves in every voice, applied ones included, the German sixth's fifths are refused, parallel fifths and fourths are refused whatever their quality, and the excuses that remain are priced so the search takes them only where nothing else will do.",
   "ranges": {
     "soprano": [
       "C4",
@@ -84,7 +84,8 @@
     "parallel_perfect": {
       "enabled": true,
       "severity": "error",
-      "cost": "inf"
+      "cost": "inf",
+      "waived_cost": 40.0
     },
     "parallel_altered": {
       "enabled": true,
@@ -129,7 +130,8 @@
     "hidden_perfect": {
       "enabled": true,
       "severity": "error",
-      "cost": "inf"
+      "cost": "inf",
+      "waived_cost": 40.0
     },
     "augmented_sixth_resolution": {
       "enabled": true,
@@ -139,12 +141,14 @@
     "unequal_fifths": {
       "enabled": true,
       "severity": "error",
-      "cost": "inf"
+      "cost": "inf",
+      "waived_cost": 40.0
     },
     "unequal_fourths": {
       "enabled": true,
       "severity": "error",
-      "cost": "inf"
+      "cost": "inf",
+      "waived_cost": 40.0
     },
     "missing_essential_tone": {
       "enabled": true,
