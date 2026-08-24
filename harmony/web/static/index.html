@@ -82,6 +82,26 @@
   .col-hit    { fill: transparent; }
   .col-hit.on { fill: rgba(242,166,90,.09); }
 
+  /* Where a passing tone will go. A hollow ring is an offer, not a note:
+     nothing sounds until it is clicked. */
+  .spot        { cursor: pointer; }
+  /* A hollow shape is only hit on its outline, which makes a ring almost
+     unclickable and drops the click through to the column behind it. */
+  .spot circle, .spot .head, .spot .stem { pointer-events: all; }
+  .spot circle { fill: none; stroke: var(--ink-faint); stroke-width: 1.4;
+                 stroke-dasharray: 2.4 2.6; transition: stroke .15s; }
+  .spot:hover circle { stroke: var(--cyan); }
+  .spot.refused circle { stroke: var(--amber-dim); stroke-dasharray: 1.4 2.6;
+                         opacity: .55; }
+  .spot.refused:hover circle { stroke: var(--red); }
+  /* a placed passing tone is drawn hollow, the way a non-chord tone is heard:
+     it belongs to the line, not to the chord */
+  .passing .head { fill: none; stroke-width: 1.8; }
+  .passing.v-soprano .head { stroke: var(--v-soprano); }
+  .passing.v-alto    .head { stroke: var(--v-alto); }
+  .passing.v-tenor   .head { stroke: var(--v-tenor); }
+  .passing.v-bass    .head { stroke: var(--v-bass); }
+
   /* ---- controls at the bottom ---- */
   .controls { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; }
   .field { display: flex; flex-direction: column; gap: 5px; }
@@ -108,6 +128,7 @@
   button:hover:not(:disabled) { color: var(--ink); }
   button:disabled { opacity: .35; cursor: default; }
   button.primary { color: var(--amber); border-color: var(--amber-dim); background: #1C1811; }
+  button.on { color: var(--cyan); border-color: var(--cyan-dim); background: #111A19; }
   button.playing { color: var(--cyan); border-color: var(--cyan-dim); background: #111A19; }
   button:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
 
@@ -228,6 +249,8 @@
     </div>
 
     <button class="primary" id="go">Realize</button>
+    <button id="keep" disabled
+            title="Hold this soprano. Add a chord and the tune stays; only the new chord is left for the engine.">Keep soprano</button>
     <button id="play" disabled>Play</button>
     <a id="export" class="export" href="#" download>Export MIDI</a>
   </div>
@@ -306,6 +329,21 @@
   var score = document.getElementById("score");
   var current = null, currentIndex = 0;
 
+  /* Passing tones the writer has clicked, as "chord:voice". The engine finds
+     where one will fit; which of those to take is nobody's choice but the
+     writer's, so this lives here and is sent with every realization. */
+  var chosen = {};
+  function key_(chord, voice) { return chord + ":" + voice; }
+  function chosenList() {
+    return Object.keys(chosen).map(function (k) {
+      var parts = k.split(":");
+      return [+parts[0], parts[1]];
+    });
+  }
+
+  /* Whether the realized soprano is held across re-realizations. */
+  var keeping = false;
+
   /* ---------- drawing ---------- */
 
   function ledgersFor(d) {
@@ -328,18 +366,27 @@
       return;
     }
 
-    var chords = payload.results[resultIndex].chords;
+    var result = payload.results[resultIndex];
+    var chords = result.chords;
+    var events = result.events || [];
+    var offers = result.opportunities || [];
     /* a result may have re-inverted something, so take its own numerals */
-    var numerals = payload.results[resultIndex].numerals || payload.numerals;
+    var numerals = result.numerals || payload.numerals;
     var sigCount = (payload.signature && payload.signature.count) || 0;
     var W = LEFT + CLEF_W + sigCount * SIG_W + chords.length * COL_W + 34;
 
     /* Size the page to the music rather than to the worst case, so a piece
-       that never leaves the staff is not framed by empty paper. */
+       that never leaves the staff is not framed by empty paper. Passing
+       tones and the offers of them count: a tone above the top line must
+       not be cropped just because no chord goes that high. */
     var positions = [];
     chords.forEach(function (chord) {
       VOICES.forEach(function (name) { positions.push(dia(chord[name])); });
     });
+    events.forEach(function (e) {
+      VOICES.forEach(function (name) { positions.push(dia(e.voices[name])); });
+    });
+    offers.forEach(function (o) { if (o.note) positions.push(dia(o.note)); });
     var highest = Math.max.apply(null, positions);
     var lowest = Math.min.apply(null, positions);
     var top = Math.min(yOf(TREBLE[4]) - 16, yOf(highest) - STEM - 8);
@@ -373,18 +420,21 @@
       score.appendChild(glyph(sigGlyph, sx, yOf(SIG_ORDER[sig.kind].bass[s]), 0.8, "clef"));
     }
 
-    chords.forEach(function (chord, index) {
-      var x = LEFT + CLEF_W + sigCount * SIG_W + index * COL_W + COL_W / 2;
+    /* A decorated beat holds two sonorities, so the chord slides left to
+       make room for the tone on the weak half. An undecorated beat stays
+       centred, which is why a score with no passing tones in it is drawn
+       exactly as it was before there were any. */
+    var STRONG_SHIFT = COL_W * 0.17, WEAK_SHIFT = COL_W * 0.21;
 
-      var hit = el("rect", { "class": "col-hit", x: x - COL_W / 2 + 3,
-        y: top, width: COL_W - 6, height: H });
-      hit.dataset.index = index;
-      score.appendChild(hit);
-
+    /* `which` is the voices to draw. On the weak half of a decorated beat
+       that is only the ones actually moving: a voice holding through the
+       split is one longer note, and drawing it again would say it was sung
+       twice - the same mistake the encoder makes if it re-strikes it. */
+    function sonority(voices, x, passing, index, which) {
       /* ledgers once per position, however many voices want them */
       var drawn = {};
-      VOICES.forEach(function (name) {
-        ledgersFor(dia(chord[name])).forEach(function (l) {
+      which.forEach(function (name) {
+        ledgersFor(dia(voices[name])).forEach(function (l) {
           if (drawn[l]) return;
           drawn[l] = 1;
           score.appendChild(line(x - 19, yOf(l), x + 19, yOf(l), "ledger"));
@@ -393,9 +443,19 @@
 
       /* noteheads, nudged apart when two voices share or neighbour a position */
       var seen = {};
-      VOICES.forEach(function (name) {
-        var note = chord[name], d = dia(note), y = yOf(d);
-        var group = el("g", { "class": "v-" + name });
+      which.forEach(function (name) {
+        var note = voices[name], d = dia(note), y = yOf(d);
+        var decorating = (passing || []).indexOf(name) >= 0;
+        var group = el("g", { "class": "v-" + name + (decorating ? " passing spot" : "") });
+        if (decorating) {
+          group.dataset.chord = index;
+          group.dataset.voice = name;
+          group.dataset.placed = "1";
+          var off = document.createElementNS(SVGNS, "title");
+          off.textContent = "passing tone (" + name + " " + note.name +
+                            ") - click to take it out";
+          group.appendChild(off);
+        }
         score.appendChild(group);
         var shift = 0;
         for (var other in seen) if (Math.abs(seen[other] - d) <= 1) shift = 15;
@@ -414,6 +474,48 @@
           ? line(nx + 6.8, y - 1.6, nx + 6.8, y - STEM, "stem")
           : line(nx - 6.8, y + 1.6, nx - 6.8, y + STEM, "stem"));
       });
+    }
+
+    var byChord = {};
+    events.forEach(function (e) {
+      (byChord[e.chord] = byChord[e.chord] || []).push(e);
+    });
+
+    chords.forEach(function (chord, index) {
+      var x = LEFT + CLEF_W + sigCount * SIG_W + index * COL_W + COL_W / 2;
+
+      var hit = el("rect", { "class": "col-hit", x: x - COL_W / 2 + 3,
+        y: top, width: COL_W - 6, height: H });
+      hit.dataset.index = index;
+      score.appendChild(hit);
+
+      var group = byChord[index] || [{ voices: chord, passing: [] }];
+      var split = group.length > 1;
+      group.forEach(function (e, half) {
+        sonority(e.voices,
+                 split ? (half ? x + WEAK_SHIFT : x - STRONG_SHIFT) : x,
+                 e.passing, index, half ? e.passing : VOICES);
+      });
+
+      /* Where a passing tone would go, and where one would be refused. The
+         engine finds the places; taking them is the writer's business, so
+         nothing here sounds until it is clicked. */
+      offers.forEach(function (o) {
+        if (o.chord !== index || !o.note) return;
+        if (chosen[key_(o.chord, o.voice)] && !o.refusedBy) return;   // drawn as a note
+        var spot = el("g", { "class": "spot" + (o.refusedBy ? " refused" : "") });
+        spot.dataset.chord = o.chord;
+        spot.dataset.voice = o.voice;
+        spot.dataset.refused = o.refusedBy || "";
+        spot.appendChild(el("circle",
+          { cx: x + WEAK_SHIFT, cy: yOf(dia(o.note)), r: 7 }));
+        var why = document.createElementNS(SVGNS, "title");
+        why.textContent = o.refusedBy
+          ? o.voice + " " + o.note.name + " would break " + o.refusedBy
+          : "add a passing tone: " + o.voice + " " + o.note.name;
+        spot.appendChild(why);
+        score.appendChild(spot);
+      });
 
       var label = el("text", { "class": "numeral", x: x, y: bottom - 12 });
       label.textContent = numerals[index];
@@ -423,6 +525,22 @@
       score.appendChild(beat);
     });
   }
+
+  /* One delegate for both: an offer becomes a note, a note becomes an offer
+     again. A refused offer answers with the rule rather than doing nothing,
+     because why it cannot go there is the part worth knowing. */
+  score.addEventListener("click", function (event) {
+    var spot = event.target.closest && event.target.closest(".spot");
+    if (!spot) return;
+    if (spot.dataset.refused) {
+      setStatus("a passing tone there would break " + spot.dataset.refused +
+                " - the decoration makes the fault, not the chords", "err");
+      return;
+    }
+    var slot = key_(+spot.dataset.chord, spot.dataset.voice);
+    if (chosen[slot]) delete chosen[slot]; else chosen[slot] = true;
+    realize(true);
+  });
 
   function highlight(index) {
     [].forEach.call(score.querySelectorAll(".col-hit"), function (r) {
@@ -484,6 +602,30 @@
     button.textContent = "Play";
   }
 
+  /* When each voice's notes start and stop, in beats. A voice holding
+     through a split beat sounds once - striking it again would turn a
+     decorated chord into a pair of block eighth notes. A voice repeating
+     its pitch under the next chord is struck again, because the harmony
+     beneath it changed. The MIDI encoder does exactly this, so the file
+     and the speakers agree. */
+  function sounding(events) {
+    var out = [];
+    VOICES.forEach(function (name) {
+      var note = null, from = 0, at = 0, chord = null;
+      events.forEach(function (e) {
+        var midi = e.voices[name].midi;
+        if (note !== null && (midi !== note || e.chord !== chord)) {
+          out.push({ from: from, to: at, midi: note });
+          note = null;
+        }
+        if (note === null) { note = midi; from = at; chord = e.chord; }
+        at += e.beats;
+      });
+      if (note !== null) out.push({ from: from, to: at, midi: note });
+    });
+    return out;
+  }
+
   function play() {
     if (!current || !current.ok) return;
     if (playing) { stopPlayback(); return; }
@@ -491,7 +633,7 @@
     if (!audio) return;
     if (audio.state === "suspended") audio.resume();
 
-    var chords = current.results[currentIndex].chords;
+    var events = current.results[currentIndex].events || [];
     var beat = 60 / (+document.getElementById("tempo").value);
     var start = audio.currentTime + 0.06;
 
@@ -500,15 +642,24 @@
     button.classList.add("playing");
     button.textContent = "Stop";
 
-    chords.forEach(function (chord, index) {
-      VOICES.forEach(function (name) {
-        strike(chord[name].midi, start + index * beat, beat);
-      });
-      timers.push(setTimeout(function () { highlight(index); },
-        (start - audio.currentTime + index * beat) * 1000));
+    sounding(events).forEach(function (note) {
+      strike(note.midi, start + note.from * beat, (note.to - note.from) * beat);
+    });
+
+    /* the column lights up when its chord begins; the weak half belongs to
+       the same chord and does not light it again */
+    var at = 0, total = 0;
+    events.forEach(function (e) {
+      if (!e.passing.length) {
+        var when = at, which = e.chord;
+        timers.push(setTimeout(function () { highlight(which); },
+          (start - audio.currentTime + when * beat) * 1000));
+      }
+      at += e.beats;
+      total += e.beats;
     });
     timers.push(setTimeout(stopPlayback,
-      (start - audio.currentTime + chords.length * beat) * 1000 + 120));
+      (start - audio.currentTime + total * beat) * 1000 + 120));
   }
 
   /* ---------- wiring ---------- */
@@ -540,6 +691,7 @@
       tempo: document.getElementById("tempo").value,
       soprano: melodyText(),
       alt: String(currentIndex),
+      passing: Object.keys(chosen).join(","),
     }).toString();
   }
 
@@ -628,7 +780,15 @@
                      "   " + option.function;
         chip.addEventListener("click", function () {
           choices[index] = option.numeral;
-          document.getElementById("prog").value = choices.join(" ");
+          var field = document.getElementById("prog");
+          var written = field.value.trim().split(/\s+/).filter(Boolean);
+          if (written.length > choices.length) {
+            written[index] = option.numeral;      // leave the extra chords alone
+            field.value = written.join(" ");
+          } else {
+            field.value = choices.join(" ");
+          }
+          chosen = {};
           renderOptions(payload);
           realize();
         });
@@ -663,15 +823,33 @@
           if (typed.length === payload.notes.length && options.indexOf(typed[i]) >= 0) {
             return typed[i];
           }
+          /* a hole offers nothing, so whatever is already written stands */
+          if (entry.free) return typed[i] || "";
           return options[0] || "";
         });
-        document.getElementById("prog").value = choices.join(" ");
+        /* Never shrink the progression to fit the melody. A melody shorter
+           than the progression is the whole point of holding one: the extra
+           chord is exactly what the engine has been left to answer. */
+        if (!typed.length || choices.length === typed.length) {
+          document.getElementById("prog").value = choices.join(" ");
+        }
         renderOptions(payload);
       })
       .catch(function () { box.innerHTML = ""; });
   }
 
-  function realize() {
+  /* Hold the tune the engine found. Adding a chord then leaves the melody
+     one note short of the progression, which the engine reads as "choose
+     that one and leave the rest alone" - so the notes already chosen stay
+     put and the new chord is the only one in play. */
+  function captureSoprano(payload) {
+    document.getElementById("soprano").value =
+      payload.results[currentIndex].chords.map(function (c) {
+        return c.soprano.name;
+      }).join(" ");
+  }
+
+  function realize(keepAlternate) {
     stopPlayback();
     var button = document.getElementById("go");
     button.disabled = true;
@@ -686,36 +864,39 @@
         profile: document.getElementById("profile").value,
         soprano: melodyText(),
         alternates: 3,
+        passing: chosenList(),
       }),
     })
       .then(function (r) { return r.json(); })
       .then(function (payload) {
         button.disabled = false;
-        currentIndex = 0;
+        if (!keepAlternate) currentIndex = 0;
         if (!payload.ok) {
           current = null;
-          /* A stale server is otherwise invisible: the page reloads fine while the
-     Python behind it is whatever was running when it started. */
-  fetch("/api/profiles").then(function (r) { return r.json(); })
-    .then(function (d) {
-      document.getElementById("build").textContent = "engine " + (d.build || "?");
-    }).catch(function () {});
-
-  draw(null, 0);
-  updateExport();
+          draw(null, 0);
           renderAlternates(null);
           document.getElementById("play").disabled = true;
+          document.getElementById("keep").disabled = true;
           updateExport();
           setStatus(payload.error, "err");
           return;
         }
         current = payload;
-        draw(payload, 0);
+        if (currentIndex >= payload.results.length) currentIndex = 0;
+
+        /* A re-realization can move the voicing a choice was made against,
+           and a passing tone that no longer fits is not silently kept. */
+        var lost = payload.results[currentIndex].refused || [];
+        lost.forEach(function (r) { delete chosen[key_(r.chord, r.voice)]; });
+
+        draw(payload, currentIndex);
         renderAlternates(payload);
         renderExceptions(payload);
         document.getElementById("play").disabled = false;
+        document.getElementById("keep").disabled = false;
+        if (keeping) captureSoprano(payload);
         updateExport();
-        var swaps = payload.results[0].substitutions || [];
+        var swaps = payload.results[currentIndex].substitutions || [];
         if (swaps.length) {
           var note = document.createElement("div");
           note.style.color = "var(--cyan-dim)";
@@ -725,7 +906,7 @@
             }).join(", ");
           document.getElementById("exceptions").appendChild(note);
         }
-        var faults = payload.results[0].violations.length;
+        var faults = payload.results[currentIndex].violations.length;
         setStatus(faults
           ? faults + " violation" + (faults === 1 ? "" : "s") + " remain"
           : "no violations  ·  " + payload.numerals.length + " chords  ·  " +
@@ -796,10 +977,29 @@
     updateExport();          // the exported file carries the tempo
   });
 
-  document.getElementById("go").addEventListener("click", realize);
+  var keepButton = document.getElementById("keep");
+  keepButton.addEventListener("click", function () {
+    keeping = !keeping;
+    keepButton.classList.toggle("on", keeping);
+    keepButton.textContent = keeping ? "Soprano held" : "Keep soprano";
+    if (!keeping) {
+      setStatus("soprano released - the engine may choose a new tune", "ok");
+      return;
+    }
+    if (current && current.ok) captureSoprano(current);
+    setStatus("soprano held - add a chord and only the new one is left to the engine",
+              "ok");
+  });
+
+  document.getElementById("go").addEventListener("click", function () { realize(); });
   document.getElementById("play").addEventListener("click", play);
   document.getElementById("prog").addEventListener("keydown", function (e) {
     if (e.key === "Enter") realize();
+  });
+  /* Editing the progression by hand invalidates choices made against the
+     old one; the notes stay, the decorations do not. */
+  document.getElementById("prog").addEventListener("input", function () {
+    chosen = {};
   });
 
   var sopranoBox = document.getElementById("soprano");

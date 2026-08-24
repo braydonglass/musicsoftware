@@ -64,6 +64,67 @@ soprano. Containing the pitch class is not enough — the note may sit outside
 the soprano range, or every voicing reaching it may double a tendency tone.
 The web page shows the same options as clickable chips under each note.
 
+## Holding a melody in part
+
+A melody may be pinned only where you want it pinned. `_` leaves that chord's
+soprano to the engine:
+
+```
+$ harmony realize --key "C major" --progression "I IV V I" --soprano "E5 _ B4 C5"
+```
+
+A melody shorter than the progression says the same thing about the chords
+past its end, which is what makes adding a chord safe. The engine picks a
+soprano when it is given none, so a fifth numeral used to rewrite the whole
+tune; now the four notes already chosen stay put and only the new chord is in
+play.
+
+The web page has a **Keep soprano** button for exactly this. Press it and the
+realized soprano is written back into the melody box after every realization,
+so a chord can be added, a profile changed or an alternate chosen without
+losing the tune.
+
+## Passing tones
+
+A passing tone fills a melodic third with the step between. The engine does
+not decide to write one: it reports every place one *would* go, and which of
+those to take is the writer's. In the web page the offers are dotted rings in
+the score — click one to place it, click the note to take it out.
+
+Nothing is offered blind. Every candidate is run through the rules already in
+the registry, and the refused ones stay on the page as dimmed rings that name
+the rule when clicked, because where a passing tone cannot go is worth as much
+as where one can. This is the classic trap: `E4/C4` moving to `G4/D4` is a
+third opening to a fifth and is clean, but fill the soprano's third with `F4`
+and the pair reads `C4/F4` to `D4/G4` — consecutive perfect fourths the chords
+alone never had.
+
+Only rules that can speak about a non-chord tone are consulted, which means
+motion and position. The harmonic rules all ask what a *chord* owes, and a
+passing tone is not in the chord, so `incomplete_chord`,
+`missing_essential_tone`, `doubling_preference` and the resolution rules are
+deliberately not asked. `core/embellish.py` lists both sets and says why each
+is where it is.
+
+Two passing tones that are each legal alone are not therefore legal together,
+so choices are taken one at a time and each is judged against the sonority the
+ones before it have already built.
+
+The spelling falls out of the rules rather than out of new code. In C minor an
+`A-flat` filling `G` up to `B-natural` is a melodic augmented second, and
+`melodic_augmented` refuses it — the same rule that would refuse it anywhere
+else.
+
+**Meter still goes no further.** A passing tone sits on the weak half of the
+beat it decorates, which is a fact about the beat and not about the bar, so
+the embellishment pass is never given a time signature. The assertion that
+`4/4` and `3/8` produce identical output holds with passing tones on.
+
+Passing tones are a web-page feature. There is no `realize --embellish` flag:
+placing them is something done by pointing at a score, and a command line is
+the wrong instrument for it. The engine is `core/embellish.py` if that ever
+changes.
+
 ## Chord vocabulary
 
 | Kind | Examples |
@@ -152,6 +213,14 @@ realize `i V i` in D minor with no C-sharp anywhere.
 - `leap_recovery` needs three chords, and a trellis edge may only depend on
   two. It is evaluated by `check` and skipped by the solver, so it is a
   style note rather than a search constraint.
+- `check` grades chords, not decorations. A realization with passing tones in
+  it cannot be submitted for grading: the voice lines would be longer than the
+  progression, and every non-chord tone would be read as a chord tone and
+  condemned.
+- Passing tones only. Neighbours would take the same machinery, but
+  suspensions and anticipations sit on the strong half of a beat, and knowing
+  which half is strong needs meter - the same requirement that keeps `I64`
+  out.
 - The German sixth resolving straight to V produces parallel fifths.
   `kostka_payne` and `linear` permit them, `strict_pedagogical` refuses
   them; textbooks that refuse them expect a cadential six-four in between,
