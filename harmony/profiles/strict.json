@@ -1,6 +1,6 @@
 {
   "name": "strict",
-  "description": "The leading tone resolves in every voice, applied ones included, the German sixth's fifths are refused, parallel fifths and fourths are refused whatever their quality, and the excuses that remain are priced so the search takes them only where nothing else will do.",
+  "description": "The leading tone resolves in every voice, applied ones included, the German sixth's fifths are refused, parallel fifths and fourths are refused whatever their quality, a direct fourth is a fault however it is approached, and the excuses that remain are priced so the search takes them only where nothing else will do.",
   "ranges": {
     "soprano": [
       "C4",
@@ -53,7 +53,8 @@
       "alto",
       "tenor",
       "bass"
-    ]
+    ],
+    "hidden_fourth_leap": "none"
   },
   "rules": {
     "voice_range": {

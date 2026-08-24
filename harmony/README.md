@@ -169,14 +169,22 @@ condition — the fault is the upper voice *leaping* into the perfect interval.
 The profile still refuses more than the old one did: 6.67% of the transitions
 in a two-key sweep survive it against 7.25% before.
 
-The consequence is worth stating plainly, because it reads like a gap. `IV` to
-`V` writes a direct perfect fourth between upper voices and nothing complains.
-That is not an oversight and it cannot be fixed by a setting. The two roots
-are a step apart, so the upper voices are obliged to move together and some
-pair always lands on a fourth or a fifth; every configuration that forbids it
-also forbids `V` to `I`. A fourth between upper voices is a consonance — it is
-only against the bass that it is treated otherwise — and the classical
-prohibition is on hidden fifths and octaves reached by a leap.
+That leaves the fourth, and the fourth needs its own answer. `IV` to `V` puts
+a direct perfect fourth between some pair every time: the roots are a step
+apart, so the upper voices are obliged to move together, and the voice on top
+*steps* rather than leaps. Under `"upper"` nothing sees it.
+
+Loosening `hidden_perfect_leap` is not the fix, and this is where one switch
+for three intervals gives out. Set to `"none"` it also condemns the direct
+octave in `V` to `I` — the soprano stepping 7 to 8 over a bass leaping 5 to 1
+— which is the authentic cadence, and seven of the twenty-four corpus
+progressions stop being writable.
+
+So the fourth answers to `hidden_fourth_leap`, and the shipped profile sets it
+to `"none"`: a direct fourth is a fault however it is approached, while fifths
+and octaves keep the classical condition. The whole corpus still writes as
+typed, and the landing page's `IV` to `V` comes out clean — the solver simply
+chooses a different voicing, which was available the whole time.
 
 `applied_leading_tone_voices` says the same thing for a secondary dominant's
 applied leading tone, which `waiver_for` already excuses the fifth of. The

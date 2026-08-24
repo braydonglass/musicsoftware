@@ -606,9 +606,17 @@ def hidden_perfect(ctx: TransitionContext) -> list[Violation]:
         #   "upper"  - classical: only the upper voice leaping counts
         #   "either" - either voice leaping counts, which catches a stepping
         #              upper part over a leaping bass
-        #   "none"   - any similar approach at all, which is stricter than any
-        #              textbook and makes iv -> V in minor unrealizable
+        #   "none"   - any similar approach at all
         leap = ctx.profile.param("hidden_perfect_leap", "upper")
+        # The fourth answers to its own setting, because it is the interval
+        # stepwise similar motion actually reaches: IV to V drops some pair
+        # into one every time, the upper voice stepping. One switch for all
+        # three cannot express that. Set to "none" it would also condemn the
+        # direct octave in V to I, where the alto steps to the tonic over a
+        # leaping bass, and there would be no authentic cadence left to
+        # write - which is exactly what happened when this was one knob.
+        if simple.generic == 4:
+            leap = ctx.profile.param("hidden_fourth_leap", leap)
         upper_leap = abs(ctx.b[upper].midi - ctx.a[upper].midi) > 2
         lower_leap = abs(ctx.b[lower].midi - ctx.a[lower].midi) > 2
         if leap == "upper" and not upper_leap:

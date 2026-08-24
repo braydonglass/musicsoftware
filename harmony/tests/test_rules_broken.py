@@ -99,6 +99,38 @@ class BrokenCorpus(unittest.TestCase):
         self.assert_single(errs, "parallel_altered", ["soprano", "alto"])
         self.assertIn("augmented fourth", errs[0].message)
 
+    def test_a_direct_fourth_reached_by_step_is_a_fault(self):
+        """The landing page's own IV to V, and the reason fourths need
+        their own leap condition.
+
+        Soprano A4 over tenor F3 is a third; both descend a step and it
+        becomes G4 over D3, a fourth. No voice leaps, so the condition that
+        governs fifths and octaves never fires - and that condition cannot
+        simply be loosened, because on stepwise motion it also condemns the
+        direct octave in V to I and leaves the cadence unwritable. The
+        fourth is the interval reached this way, so it gets its own knob.
+        """
+        errs = self.errors("C major", "IV V", [
+            voicing("A4", "C4", "F3", "F2"),
+            voicing("G4", "B3", "D3", "G2"),
+        ])
+        self.assert_single(errs, "hidden_perfect", ["soprano", "tenor"])
+        self.assertIn("fourth", errs[0].message)
+
+    def test_a_direct_octave_reached_by_step_is_still_allowed(self):
+        """V to I, which is what the single switch used to cost.
+
+        Alto B3 steps to C4 over a bass leaping G2 to C3, arriving at an
+        octave by similar motion. The upper voice does not leap, so the
+        classical condition leaves it alone - and it has to, or there is no
+        authentic cadence to write.
+        """
+        errs = self.errors("C major", "V I", [
+            voicing("G4", "B3", "D3", "G2"),
+            voicing("G4", "C4", "E3", "C3"),
+        ])
+        self.assertEqual([], [e for e in errs if e.rule_id == "hidden_perfect"])
+
     def test_unresolved_leading_tone_in_the_soprano(self):
         errs = self.errors("C major", "V I", [
             voicing("B4", "D4", "D3", "G2"),
