@@ -196,6 +196,26 @@ The `unequal_fifths` parameter takes `"all"` or `"with_bass"`, the latter
 narrowing it to pairs involving the bass. `strict_pedagogical` has it on and
 set to `"all"`.
 
+### And the same for fourths
+
+`unequal_fourths` is the fourth's half of the same idea: a perfect fourth
+moving to an augmented one, or back, with both voices moving. It is a
+separate rule because neither of its neighbours can see it — `parallel_perfect`
+requires *both* intervals to be perfect, and `hidden_perfect` requires the
+*arrival* to be perfect. An augmented fourth is neither, so a fourth sliding
+into a tritone went unreported by both.
+
+That is easy to reach in minor. The diminished chord on the second degree
+puts a tritone above its own third, so `i` to `ii°6` in D minor with the
+soprano on `D5` and the tenor on `A3` writes `D5/A3` — a perfect fourth —
+straight into `E5/Bb3`, a tritone. Two fourths on the staff, moving together.
+
+It takes the same `"all"` or `"with_bass"` parameter as `unequal_fifths` and
+consults the same waiver, so a diminished chord or a secondary dominant
+excuses it for the same stated reason and it is reported as an exception
+rather than a fault.
+
+
 ## Preferences a profile may zero, and facts it may not
 
 `root_doubling` and `incomplete_chord` are preferences: a profile may price

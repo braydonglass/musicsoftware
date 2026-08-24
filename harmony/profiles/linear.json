@@ -44,7 +44,8 @@
       "soprano",
       "bass"
     ],
-    "hidden_fourth_pairs": "all"
+    "hidden_fourth_pairs": "all",
+    "unequal_fourths": "all"
   },
   "rules": {
     "voice_range": {
@@ -123,6 +124,11 @@
       "cost": "inf"
     },
     "unequal_fifths": {
+      "enabled": true,
+      "severity": "error",
+      "cost": "inf"
+    },
+    "unequal_fourths": {
       "enabled": true,
       "severity": "error",
       "cost": "inf"

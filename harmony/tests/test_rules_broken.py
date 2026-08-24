@@ -56,6 +56,21 @@ class BrokenCorpus(unittest.TestCase):
         self.assert_single(errs, "parallel_perfect", ["soprano", "tenor"])
         self.assertIn("octaves", errs[0].message)
 
+    def test_unequal_fourths_between_soprano_and_tenor(self):
+        """A perfect fourth to an augmented fourth, moving together.
+
+        The fourth's exact analogue of unequal_fifths, and the reason it
+        needs its own rule: parallel_perfect wants both intervals perfect
+        and hidden_perfect wants the arrival perfect, so an augmented
+        fourth slips past both while the ear hears two fourths in parallel.
+        """
+        errs = self.errors("d minor", "i ii°6", [
+            voicing("D5", "F4", "A3", "D3"),
+            voicing("E5", "E4", "Bb3", "G2"),
+        ])
+        self.assert_single(errs, "unequal_fourths", ["soprano", "tenor"])
+        self.assertIn("fourth", errs[0].message)
+
     def test_unresolved_leading_tone_in_the_soprano(self):
         errs = self.errors("C major", "V I", [
             voicing("B4", "D4", "D3", "G2"),

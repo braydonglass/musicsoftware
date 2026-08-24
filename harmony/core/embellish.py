@@ -56,6 +56,8 @@ MOTION_RULES = (
     "parallel_perfect",
     "consecutive_perfects",
     "hidden_perfect",
+    "unequal_fifths",
+    "unequal_fourths",
     "voice_overlap",
     "melodic_augmented",
 )

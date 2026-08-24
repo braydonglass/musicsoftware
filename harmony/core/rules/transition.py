@@ -24,19 +24,21 @@ def waiver_for(spec) -> str:
     The excuse belongs to the musical situation, not to whichever rule
     happens to notice it first. Every rule that polices perfect consonances
     consults this, so a chord cannot be excused by one and condemned by
-    another for the same motion.
+    another for the same motion. That now includes the fourth as well as
+    the fifth, so the wording speaks of intervals rather than of fifths.
     """
     if spec.tonicized_degree is not None:
         return ("A secondary dominant's applied leading tone must rise and its "
                 "seventh must fall. Both obligations point the same way, and "
-                "honouring them is what opens the fifth. Leaving a tendency "
+                "honouring them is what opens the interval. Leaving a tendency "
                 "tone unresolved would be the worse fault.")
     if spec.quality == "diminished":
         return ("Every note of a diminished chord is a tendency tone, so every "
                 "voice is already committed to a step and there is no spare "
-                "voice left to break the fifth with. This is the textbook "
-                "unequal fifth - a genuine parallel fifth here would still be "
-                "caught, because quality is stored rather than counted.")
+                "voice left to break the interval with. This is the textbook "
+                "unequal fifth, and the fourth it inverts to - a genuine "
+                "parallel perfect interval here would still be caught, because "
+                "quality is stored rather than counted.")
     return ""
 
 
@@ -201,6 +203,62 @@ def unequal_fifths(ctx: TransitionContext) -> list[Violation]:
         out.append(Violation(
             "unequal_fifths", [upper, lower], ctx.index,
             f"{before.quality} fifth to {after.quality} fifth: "
+            f"{ctx.a[upper]}/{ctx.a[lower]} moving to "
+            f"{ctx.b[upper]}/{ctx.b[lower]}",
+            severity="exception" if excuse else "error",
+            waived=bool(excuse),
+            reason=excuse,
+        ))
+    return out
+
+
+@register(
+    rule_id="unequal_fourths",
+    scope="transition", severity="error", cost=math.inf, category="voice_leading",
+    explanation=("Two fourths in a row where only the quality differs - perfect to "
+                 "augmented, or augmented to perfect. The ear hears two fourths "
+                 "moving together, and the other rules cannot see it: "
+                 "parallel_perfect wants both intervals perfect and hidden_perfect "
+                 "wants the arrival perfect."),
+)
+def unequal_fourths(ctx: TransitionContext) -> list[Violation]:
+    """The fourth's analogue of unequal_fifths, and it has to be its own rule.
+
+    A perfect fourth moving to an augmented one is not parallel fourths -
+    the intervals differ in quality, which is exactly the distinction
+    spelled pitch exists to preserve. But it is not nothing either: both
+    voices move together and the letter distance never changes, so what is
+    written on the staff is two fourths in a row.
+
+    The gap this closes is specific. parallel_perfect asks that *both*
+    intervals be watched perfect ones, and hidden_perfect asks that the
+    *arrival* be perfect. An augmented fourth is neither, so a fourth
+    sliding into a tritone passed both untouched - which is easy to reach
+    in minor, where the diminished chord on the second degree puts a
+    tritone over the very note a fourth wants to land on.
+    """
+    scope = ctx.profile.param("unequal_fourths", "all")
+    pairs = ALL_PAIRS if scope == "all" else [p for p in ALL_PAIRS if "bass" in p]
+    out = []
+    for upper, lower in pairs:
+        if not (_moved(ctx, upper) and _moved(ctx, lower)):
+            continue
+        before = interval_between(ctx.a[upper], ctx.a[lower]).simplified()
+        after = interval_between(ctx.b[upper], ctx.b[lower]).simplified()
+        if before.generic != 4 or after.generic != 4:
+            continue
+        try:
+            qualities = {before.quality, after.quality}
+        except UnknownQuality:
+            continue
+        # One of each. Perfect to perfect is parallel_perfect's business, and
+        # augmented to augmented is a tritone held rather than a fourth moving.
+        if len(qualities) != 2 or "perfect" not in qualities:
+            continue
+        excuse = waiver_for(ctx.spec_a)
+        out.append(Violation(
+            "unequal_fourths", [upper, lower], ctx.index,
+            f"{before.quality} fourth to {after.quality} fourth: "
             f"{ctx.a[upper]}/{ctx.a[lower]} moving to "
             f"{ctx.b[upper]}/{ctx.b[lower]}",
             severity="exception" if excuse else "error",

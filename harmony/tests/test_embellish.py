@@ -88,6 +88,25 @@ class TestOpportunities(unittest.TestCase):
         self.assertFalse(soprano[0].available)
         self.assertEqual(soprano[0].refused_by, "parallel_perfect")
 
+    def test_a_passing_tone_making_unequal_fourths_is_refused_by_name(self):
+        """The tone puts a fourth into a tritone; the chords never did.
+
+        F5 over D4 is a sixth and E5 over Bb3 is a tritone, and that move
+        is clean. Fill the tenor's third with C4 and the soprano's F5 sits
+        a perfect fourth above it, which then slides into the tritone -
+        two fourths moving together that differ only in quality, which is
+        what unequal_fourths exists to catch.
+        """
+        key = Key.parse("d minor")
+        specs = parse_progression("i ii°", key)
+        voicings = [_v("F5", "F4", "D4", "D3"), _v("E5", "G4", "Bb3", "E3")]
+        found = opportunities(voicings, specs, key, self.profile)
+        tenor = [o for o in found if o.voice == "tenor"]
+        self.assertEqual(len(tenor), 1)
+        self.assertEqual(str(tenor[0].pitch), "C4")
+        self.assertFalse(tenor[0].available)
+        self.assertEqual(tenor[0].refused_by, "unequal_fourths")
+
     def test_every_offer_is_a_step_from_both_of_its_neighbours(self):
         """Whatever is offered must be a real passing figure."""
         for key_text, prog in CORPUS:
