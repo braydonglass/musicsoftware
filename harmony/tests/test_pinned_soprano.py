@@ -50,10 +50,21 @@ class TestPartlyPinnedRealization(unittest.TestCase):
         self.assertEqual(pinned, ["E5", "F5", "C5"])
 
     def test_a_hole_still_realizes_all_four_voices(self):
-        """A hole frees the soprano, it does not silence the chord."""
-        result, _ = self.realize("I IV V I", "E5 F5 _ C5")
+        """A hole frees the soprano, it does not silence the chord.
+
+        Four voices sound and the chord keeps the tones it owes. Not four
+        *distinct* pitches: two voices sharing one is a priced warning in
+        this engine, not a fault, so demanding four would be testing a
+        preference the profile is free to set.
+        """
+        result, specs = self.realize("I IV V I", "E5 F5 _ C5")
         third = result.voicings[2]
-        self.assertEqual(len({p.midi for p in third.pitches}), 4)
+        self.assertEqual(len(third.pitches), 4)
+        sounding = {p.pitch_class.chroma for p in third.pitches}
+        essential = {specs[2].pitch_classes[0].chroma,
+                     specs[2].pitch_classes[1].chroma}
+        self.assertTrue(essential <= sounding,
+                        "the chord lost its root or its third")
 
     def test_more_notes_than_chords_is_still_refused(self):
         specs = parse_progression("I IV", self.key)

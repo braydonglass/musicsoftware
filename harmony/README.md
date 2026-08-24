@@ -186,6 +186,37 @@ and octaves keep the classical condition. The whole corpus still writes as
 typed, and the landing page's `IV` to `V` comes out clean — the solver simply
 chooses a different voicing, which was available the whole time.
 
+The outer voices need the same treatment for the opposite interval.
+`V` to `I` puts the soprano on 8 and the bass on 1, both rising, which is a
+direct octave between the two voices a listener follows most — and the
+classical excuse is that the soprano steps, which is exactly the excuse that
+does not apply when nothing is hidden. `hidden_outer_leap` covers the outer
+pair alone and also ships as `"none"`. That it is affordable depends entirely
+on it being one pair: the same strictness across all six costs nine of the
+twenty-four progressions, while here the cadence simply arrives by contrary
+motion instead — the soprano falling to the tonic as the bass rises.
+
+## Three voices moving together
+
+The interval rules each judge one pair after the fact. `similar_motion` is
+the one rule that looks at the texture instead, and it is preventive: when
+three voices move the same way, some pair lands on a perfect fourth, fifth or
+octave in similar motion about nine times in ten, and when all four do it is
+certain. Measured across two keys:
+
+| voices moving together | some pair reaches a perfect interval |
+|---|---|
+| 2 | 52.7% |
+| 3 | 91.4% |
+| 4 | 100% |
+
+So it is priced, not forbidden — the remaining tenth really are clean, and
+forbidding it outright costs three progressions in minor, where `iv` to `V`
+leaves the upper voices nowhere else to go. `similar_motion_limit` sets how
+many voices count as too many; the cost sits deliberately just below
+`voice_unison`, because a unison collapses four parts into three and that is
+a worse outcome than a texture which merely invites trouble.
+
 `applied_leading_tone_voices` says the same thing for a secondary dominant's
 applied leading tone, which `waiver_for` already excuses the fifth of. The
 shipped profile holds it to the same standard as any other leading tone, since

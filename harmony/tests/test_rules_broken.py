@@ -131,6 +131,63 @@ class BrokenCorpus(unittest.TestCase):
         ])
         self.assertEqual([], [e for e in errs if e.rule_id == "hidden_perfect"])
 
+    def test_a_direct_octave_between_the_outer_voices_is_a_fault(self):
+        """The cadence the engine used to write.
+
+        Soprano steps 7 to 8 while the bass leaps 5 to 1: similar motion
+        into an octave between the two voices a listener follows most.
+        The classical condition excuses it because the soprano steps, and
+        between inner voices that excuse has to stand or there is no
+        cadence left - but between soprano and bass nothing is hidden, so
+        the outer pair answers to its own setting.
+        """
+        errs = self.errors("C major", "V I", [
+            voicing("B4", "G4", "D4", "G2"),
+            voicing("C5", "G4", "E4", "C3"),
+        ])
+        self.assert_single(errs, "hidden_perfect", ["soprano", "bass"])
+
+    def test_the_same_octave_between_inner_voices_is_left_alone(self):
+        """Alto and tenor, stepping into an octave, with nothing above or
+        below them exposed. Forbidding this costs nine of the corpus."""
+        errs = self.errors("C major", "IV V", [
+            voicing("C5", "A4", "C4", "F3"),
+            voicing("B4", "G4", "G3", "G3"),
+        ])
+        self.assertEqual([], [e for e in errs if e.rule_id == "hidden_perfect"])
+
+    def test_three_voices_moving_together_is_reported(self):
+        """The shape that produces the faults, priced rather than forbidden.
+
+        Across two keys, three voices moving the same way put some pair on
+        a perfect fourth, fifth or octave in similar motion 91% of the
+        time, and four voices do it every time. It is not a fault by
+        itself - the remaining 9% are clean - so it is a preference the
+        search pays for, not a rule that blocks.
+        """
+        key = Key.parse("C major")
+        specs = parse_progression("V I", key)
+        # soprano, tenor and bass all rise; the alto holds
+        voicings = [voicing("B4", "G4", "D4", "G2"),
+                    voicing("C5", "G4", "E4", "C3")]
+        found = check(voicings, specs, key, self.profile)
+
+        reported = [v for v in found if v.rule_id == "similar_motion"]
+        self.assertTrue(reported, "three voices moving together goes unreported")
+        self.assertEqual(set(reported[0].voices), {"soprano", "tenor", "bass"})
+        self.assertEqual(
+            [], [v for v in errors_only(found) if v.rule_id == "similar_motion"],
+            "it is a preference, not a fault")
+
+    def test_two_voices_moving_together_is_ordinary(self):
+        key = Key.parse("C major")
+        specs = parse_progression("V I", key)
+        # soprano and tenor rise, the bass falls, the alto holds
+        voicings = [voicing("B4", "G4", "D4", "G3"),
+                    voicing("C5", "G4", "E4", "C3")]
+        found = check(voicings, specs, key, self.profile)
+        self.assertEqual([], [v for v in found if v.rule_id == "similar_motion"])
+
     def test_unresolved_leading_tone_in_the_soprano(self):
         errs = self.errors("C major", "V I", [
             voicing("B4", "D4", "D3", "G2"),

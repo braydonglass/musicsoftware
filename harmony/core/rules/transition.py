@@ -437,6 +437,43 @@ def seventh_resolution(ctx: TransitionContext) -> list[Violation]:
 
 
 @register(
+    rule_id="similar_motion",
+    scope="transition", severity="style", cost=6.0, category="voice_leading",
+    explanation=("Three or more voices moving the same way. Not a fault in "
+                 "itself, but the shape that makes one: with three voices "
+                 "together some pair lands on a perfect fourth, fifth or octave "
+                 "in similar motion about nine times in ten, and with all four "
+                 "it is certain. Priced rather than forbidden, because the "
+                 "remainder really are clean."),
+)
+def similar_motion(ctx: TransitionContext) -> list[Violation]:
+    """Steer away from the shape, and let the interval rules judge the result.
+
+    The faults this anticipates - parallel and direct fifths, fourths and
+    octaves - each have a rule of their own that decides the actual case.
+    What this adds is a reason to prefer a texture where they cannot easily
+    arise, which is the writer's usual instruction: keep the voices out of
+    each other's way and most of the trouble never comes up.
+
+    Forbidding it outright costs three of the twenty-four corpus
+    progressions, all in minor, where iv to V leaves the upper voices
+    little choice. So it is a price, not a wall.
+    """
+    limit = ctx.profile.param("similar_motion_limit", 3)
+    for direction in (1, -1):
+        moving = [name for name in VOICE_NAMES if _direction(ctx, name) == direction]
+        if len(moving) < limit:
+            continue
+        return [Violation(
+            "similar_motion", moving, ctx.index,
+            f"{len(moving)} voices move {'up' if direction > 0 else 'down'} "
+            f"together: {', '.join(moving)}",
+            weight=float(len(moving) - limit + 1),
+        )]
+    return []
+
+
+@register(
     rule_id="melodic_augmented",
     scope="transition", severity="error", cost=math.inf, category="voice_leading",
     explanation=("No voice may leap an augmented interval. The augmented second "
@@ -617,6 +654,16 @@ def hidden_perfect(ctx: TransitionContext) -> list[Violation]:
         # write - which is exactly what happened when this was one knob.
         if simple.generic == 4:
             leap = ctx.profile.param("hidden_fourth_leap", leap)
+        # Between soprano and bass nothing is hidden. The excuse for a
+        # stepping upper voice is that the ear does not follow the pair
+        # closely enough to notice, and that is untrue of the two voices it
+        # follows most. The outer pair therefore answers to its own setting,
+        # which the shipped profile sets to "none" - and it is affordable
+        # precisely because it is only the one pair: the same strictness
+        # across all six costs nine of the twenty-four corpus progressions,
+        # while here the cadence simply arrives by contrary motion instead.
+        if (upper, lower) == OUTER_PAIR:
+            leap = ctx.profile.param("hidden_outer_leap", leap)
         upper_leap = abs(ctx.b[upper].midi - ctx.a[upper].midi) > 2
         lower_leap = abs(ctx.b[lower].midi - ctx.a[lower].midi) > 2
         if leap == "upper" and not upper_leap:
