@@ -86,6 +86,11 @@
       "severity": "error",
       "cost": "inf"
     },
+    "parallel_altered": {
+      "enabled": true,
+      "severity": "error",
+      "cost": "inf"
+    },
     "voice_overlap": {
       "enabled": true,
       "severity": "error",

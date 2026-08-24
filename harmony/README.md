@@ -251,6 +251,25 @@ consults the same waiver, so a diminished chord or a secondary dominant
 excuses it for the same stated reason and it is reported as an exception
 rather than a fault.
 
+### And the case between them
+
+Three rules divide this ground, and for a while they did not cover it.
+`parallel_perfect` wants *both* intervals perfect. `unequal_fifths` and
+`unequal_fourths` want *one* of each. Nothing wanted the same altered
+interval twice — a diminished fifth to a diminished fifth, an augmented
+fourth to an augmented fourth — so that combination passed unseen, and it is
+easy to reach: the diminished chord on the second degree of a minor key
+writes a pair of diminished fifths into `V7` without trying.
+
+`parallel_altered` is that case. It does **not** consult the waiver, and the
+waiver's own text is why: the excuse is for an interval whose *quality*
+changes under a chord that commits every voice at once, and it says outright
+that a genuine parallel fifth is still caught, because quality is stored
+rather than counted. Two diminished fifths in a row are two fifths in a row.
+
+Closing it cost nothing — every progression in the clean corpus still writes
+as typed.
+
 
 ## Preferences a profile may zero, and facts it may not
 

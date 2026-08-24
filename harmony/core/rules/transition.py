@@ -117,6 +117,61 @@ def parallel_perfect(ctx: TransitionContext) -> list[Violation]:
 
 
 @register(
+    rule_id="parallel_altered",
+    scope="transition", severity="error", cost=math.inf, category="voice_leading",
+    explanation=("The same altered interval twice between one pair - a diminished "
+                 "fifth to a diminished fifth, an augmented fourth to an augmented "
+                 "fourth. The letter distance never changes and both voices move, "
+                 "so what is written is two fifths or two fourths running "
+                 "together, whatever their quality."),
+)
+def parallel_altered(ctx: TransitionContext) -> list[Violation]:
+    """The case that fell between the other three.
+
+    Perfect to the same perfect is parallel_perfect. Perfect to altered,
+    either direction, is unequal_fifths or unequal_fourths. Altered to the
+    same altered belonged to nobody, and it is reachable: the diminished
+    chord on the second degree of a minor key writes a pair of diminished
+    fifths into V7 without difficulty.
+
+    No waiver_for here, deliberately. That excuse is for an interval whose
+    *quality* changes under a chord that commits every voice at once, and
+    its own text draws the line: a genuine parallel fifth is still caught,
+    because quality is stored rather than counted. Two diminished fifths in
+    a row are two fifths in a row.
+    """
+    watched = ctx.profile.param("parallel_intervals", [1, 5, 8])
+    bass_only = ctx.profile.param("parallel_fourths_with_bass_only", True)
+    out = []
+    for upper, lower in ALL_PAIRS:
+        if not (_moved(ctx, upper) and _moved(ctx, lower)):
+            continue
+        before = interval_between(ctx.a[upper], ctx.a[lower]).simplified()
+        after = interval_between(ctx.b[upper], ctx.b[lower]).simplified()
+        if before.generic not in watched or after.generic != before.generic:
+            continue
+        # A change of quality is the unequal rules' to report, not this one's.
+        if before.specific != after.specific:
+            continue
+        try:
+            quality = before.quality
+        except UnknownQuality:
+            continue
+        if quality == "perfect":
+            continue                       # parallel_perfect owns these
+        if before.generic == 4 and bass_only and lower != "bass":
+            continue
+        names = {1: "unison", 4: "fourth", 5: "fifth", 8: "octave"}
+        out.append(Violation(
+            "parallel_altered", [upper, lower], ctx.index,
+            f"parallel {quality} {names[before.generic]}s: "
+            f"{ctx.a[upper]}/{ctx.a[lower]} moving to "
+            f"{ctx.b[upper]}/{ctx.b[lower]}",
+        ))
+    return out
+
+
+@register(
     rule_id="consecutive_perfects",
     scope="transition", severity="error", cost=math.inf, category="voice_leading",
     explanation=("Two perfect consonances in a row between the same pair - a fifth "

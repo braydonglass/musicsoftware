@@ -71,6 +71,29 @@ class BrokenCorpus(unittest.TestCase):
         self.assert_single(errs, "unequal_fourths", ["soprano", "tenor"])
         self.assertIn("fourth", errs[0].message)
 
+    def test_parallel_diminished_fifths_are_still_parallel_fifths(self):
+        """Two fifths of the same altered quality, which nothing was watching.
+
+        parallel_perfect wants both intervals perfect and unequal_fifths
+        wants one of each, so a diminished fifth moving to another
+        diminished fifth fell between them: the same size twice, both
+        voices moving together, and no rule with anything to say.
+        """
+        errs = self.errors("d minor", "ii° V7", [
+            voicing("G4", "Bb3", "E3", "E2"),
+            voicing("C#4", "G3", "C#3", "A2"),
+        ])
+        self.assert_single(errs, "parallel_altered", ["alto", "tenor"])
+        self.assertIn("diminished fifth", errs[0].message)
+
+    def test_parallel_augmented_fourths_are_caught_the_same_way(self):
+        errs = self.errors("d minor", "ii° V7", [
+            voicing("E4", "Bb3", "G3", "E2"),
+            voicing("C#4", "G3", "C#3", "A2"),
+        ])
+        self.assert_single(errs, "parallel_altered", ["soprano", "alto"])
+        self.assertIn("augmented fourth", errs[0].message)
+
     def test_unresolved_leading_tone_in_the_soprano(self):
         errs = self.errors("C major", "V I", [
             voicing("B4", "D4", "D3", "G2"),
