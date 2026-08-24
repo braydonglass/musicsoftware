@@ -225,6 +225,58 @@ class BrokenCorpus(unittest.TestCase):
                 for e in errors_only(check(outer, specs, key, self.profile))),
             "a frustrated leading tone in the soprano is still a fault")
 
+    def test_the_shipped_profile_excuses_no_leading_tone_anywhere(self):
+        """Applied ones included. Strictness here turned out to be free.
+
+        A secondary dominant commits every voice at once, which is why
+        waiver_for excuses the fifth it opens, and for a while the applied
+        leading tone was excused with it. That excuse was only ever the
+        price of policing hidden intervals on stepwise motion, and that
+        setting cost the authentic cadence, so both were given up together.
+        """
+        key = Key.parse("C major")
+        specs = parse_progression("V/V V", key)
+        # the tenor's F# drops to D rather than rising to G
+        voicings = [voicing("D4", "A3", "F#3", "D3"),
+                    voicing("D4", "B3", "D3", "G2")]
+        errs = errors_only(check(voicings, specs, key, self.profile))
+        self.assertIn("leading_tone_resolution", [e.rule_id for e in errs])
+
+    def test_a_profile_may_still_excuse_an_applied_leading_tone(self):
+        """The rule holds the mechanism; the profile holds the policy.
+
+        Nothing ships using this, but the engine must be able to say it -
+        the alternative is rule logic that no profile can reach, which is
+        the thing profiles exist to prevent.
+        """
+        key = Key.parse("C major")
+        specs = parse_progression("V/V V", key)
+        voicings = [voicing("D4", "A3", "F#3", "D3"),
+                    voicing("D4", "B3", "D3", "G2")]
+
+        lenient = Profile.load("strict")
+        lenient.params = dict(lenient.params,
+                              applied_leading_tone_voices=["soprano", "bass"])
+        graded = check(voicings, specs, key, lenient)
+
+        self.assertEqual([], errors_only(graded))
+        waived = [v for v in exceptions_only(graded)
+                  if v.rule_id == "leading_tone_resolution"]
+        self.assertTrue(waived, "and reported rather than passed over in silence")
+        self.assertIn("secondary dominant", waived[0].reason)
+
+    def test_an_applied_leading_tone_in_the_soprano_is_still_a_fault(self):
+        """Even where a profile excuses the inner voices."""
+        key = Key.parse("C major")
+        specs = parse_progression("V/V V", key)
+        voicings = [voicing("F#4", "A3", "D3", "D3"),
+                    voicing("D4", "B3", "D3", "G2")]
+        lenient = Profile.load("strict")
+        lenient.params = dict(lenient.params,
+                              applied_leading_tone_voices=["soprano", "bass"])
+        errs = errors_only(check(voicings, specs, key, lenient))
+        self.assertIn("leading_tone_resolution", [e.rule_id for e in errs])
+
     def test_a_leading_tone_stepping_down_is_not_frustration(self):
         """Unchanged by the stricter profile, and worth keeping so.
 

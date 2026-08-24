@@ -159,13 +159,31 @@ fifths were permitted. Both were parameters, so removing them changed no rule
 logic — which is the point of keeping rules as data.
 
 One setting had to move the other way to make that work. `hidden_perfect_leap`
-was `"none"`, meaning any similar approach to a perfect interval counted,
-which is stricter than any textbook; combined with a leading tone that must
-resolve everywhere it left `I V/V V I` with no realization at all. It is now
-`"upper"`, the classical condition — the fault is the upper voice *leaping*
-into the perfect interval. The result still refuses more than the old profile
-did: 6.67% of the transitions in a two-key sweep survive it against 7.25%
-before.
+was `"none"`, meaning any similar approach to a perfect interval counted at
+all — stricter than any textbook, and the rule's own comment says so. It
+cannot be afforded. Under `"none"` seven of the twenty-four progressions in
+the clean corpus stop being writable as typed, `I IV V I` among them: a
+root-position `V` to `I` has no legal voicing left, and the solver quietly
+re-voices the dominant as `V65` instead. It is `"upper"`, the classical
+condition — the fault is the upper voice *leaping* into the perfect interval.
+The profile still refuses more than the old one did: 6.67% of the transitions
+in a two-key sweep survive it against 7.25% before.
+
+The consequence is worth stating plainly, because it reads like a gap. `IV` to
+`V` writes a direct perfect fourth between upper voices and nothing complains.
+That is not an oversight and it cannot be fixed by a setting. The two roots
+are a step apart, so the upper voices are obliged to move together and some
+pair always lands on a fourth or a fifth; every configuration that forbids it
+also forbids `V` to `I`. A fourth between upper voices is a consonance — it is
+only against the bass that it is treated otherwise — and the classical
+prohibition is on hidden fifths and octaves reached by a leap.
+
+`applied_leading_tone_voices` says the same thing for a secondary dominant's
+applied leading tone, which `waiver_for` already excuses the fifth of. The
+shipped profile holds it to the same standard as any other leading tone, since
+strictness there turned out to cost nothing. The parameter exists so that a
+profile can decide it, rather than the rule deciding on every profile's
+behalf.
 
 `harmony rules --profile NAME` prints what is active, which is the honest
 way to answer what a profile does — a prose table describing one drifts from

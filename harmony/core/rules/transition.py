@@ -297,9 +297,11 @@ def voice_overlap(ctx: TransitionContext) -> list[Violation]:
     scope="transition", severity="error", cost=math.inf, category="resolution",
     explanation=("The leading tone of a V or vii\u00b0 rises to the tonic. It is "
                  "frustrated when it leaps away instead. Which voices that is a "
-                 "fault in is the profile's to say, in leading_tone_outer_voices; "
-                 "elsewhere it is reported as an exception with the reason. "
-                 "Moving down by step is not frustration and is allowed anywhere."),
+                 "fault in is the profile's to say, in leading_tone_outer_voices, "
+                 "and separately in applied_leading_tone_voices for a secondary "
+                 "dominant, which commits every voice at once; elsewhere it is "
+                 "reported as an exception with the reason. Moving down by step "
+                 "is not frustration and is allowed anywhere."),
 )
 def leading_tone_resolution(ctx: TransitionContext) -> list[Violation]:
     spec = ctx.spec_a
@@ -308,6 +310,16 @@ def leading_tone_resolution(ctx: TransitionContext) -> list[Violation]:
 
     tonic = spec.resolution_root_pc or ctx.key.tonic
     outer = ctx.profile.param("leading_tone_outer_voices", ["soprano", "bass"])
+    # A secondary dominant commits every voice at once: the applied leading
+    # tone must rise and the seventh must fall, and honouring both is what
+    # opens the fifth that hidden_perfect already forgives through waiver_for.
+    # Excusing the fifth while condemning the tone that forced it is exactly
+    # the inconsistency waiver_for exists to prevent - and it is not academic,
+    # it left `I V/V V I` with no realization at all. Which voices the excuse
+    # covers stays the profile's to say, in its own parameter, so a profile
+    # that wants applied leading tones held to the letter can still say so.
+    if spec.tonicized_degree is not None:
+        outer = ctx.profile.param("applied_leading_tone_voices", ["soprano", "bass"])
     out = []
 
     for name in VOICE_NAMES:
@@ -324,17 +336,22 @@ def leading_tone_resolution(ctx: TransitionContext) -> list[Violation]:
             continue
 
         frustrated_but_inner = name not in outer
+        # A secondary dominant states its own reason through waiver_for, so
+        # the chord is excused by one account rather than two.
+        excuse = ""
+        if frustrated_but_inner:
+            excuse = waiver_for(spec) or (
+                "A frustrated leading tone in an inner voice is allowed - it "
+                "is where the ear notices it least, and it lets the chord "
+                "that follows keep all four members. In the soprano or bass "
+                "it would still be a fault.")
         out.append(Violation(
             "leading_tone_resolution", [name], ctx.index,
             f"the leading tone {here} in the {name} leaps to {there} instead of "
             f"rising to {tonic}",
             severity="exception" if frustrated_but_inner else "error",
             waived=frustrated_but_inner,
-            reason=("A frustrated leading tone in an inner voice is allowed - it "
-                    "is where the ear notices it least, and it lets the chord "
-                    "that follows keep all four members. In the soprano or bass "
-                    "it would still be a fault."
-                    if frustrated_but_inner else ""),
+            reason=excuse,
         ))
     return out
 

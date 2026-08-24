@@ -1,6 +1,6 @@
 {
   "name": "strict",
-  "description": "The leading tone resolves in every voice, the German sixth's fifths are refused, and hidden fifths, fourths and octaves are policed in all six pairs whenever the upper voice leaps.",
+  "description": "The leading tone resolves in every voice, applied ones included, the German sixth's fifths are refused, and a perfect fifth, fourth or octave approached by similar motion with the upper voice leaping is a fault in all six pairs.",
   "ranges": {
     "soprano": [
       "C4",
@@ -47,7 +47,13 @@
       "bass"
     ],
     "hidden_fourth_pairs": "all",
-    "unequal_fourths": "all"
+    "unequal_fourths": "all",
+    "applied_leading_tone_voices": [
+      "soprano",
+      "alto",
+      "tenor",
+      "bass"
+    ]
   },
   "rules": {
     "voice_range": {
