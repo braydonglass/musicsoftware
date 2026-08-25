@@ -50,12 +50,18 @@ def _as_events(items, beats_per_chord: int):
 def timeline(events) -> list[tuple[float, float, int]]:
     """When each voice's notes start and stop, measured in beats.
 
-    Two rules, and the difference between them is the whole point. A voice
-    holding its pitch across a split beat sounds once: nothing happened to
-    it, and re-striking it would articulate a note the writer did not
-    write. A voice repeating its pitch under the *next* chord is struck
-    again: the harmony beneath it changed, so it is sung again rather than
-    tied over.
+    Three rules, and the differences between them are the whole point. A
+    voice holding its pitch across a split beat sounds once: nothing
+    happened to it, and re-striking it would articulate a note the writer
+    did not write. A voice repeating its pitch under the *next* chord is
+    struck again: the harmony beneath it changed, so it is sung again
+    rather than tied over.
+
+    And then the exception that second rule exists to allow. A suspension
+    is precisely a note held over into the next chord, so a voice the event
+    marks as tied carries on sounding through the chord boundary. Without
+    this the encoder would re-strike it and the figure would stop being a
+    suspension at all.
     """
     out: list[tuple[float, float, int]] = []
     for name in VOICE_NAMES:
@@ -64,7 +70,8 @@ def timeline(events) -> list[tuple[float, float, int]]:
         chord = None
         for event in events:
             pitch = event.voicing[name].midi
-            if note is not None and (pitch != note or event.chord != chord):
+            crossed = event.chord != chord and name not in getattr(event, "tied", ())
+            if note is not None and (pitch != note or crossed):
                 out.append((start, at, note))
                 note = None
             if note is None:

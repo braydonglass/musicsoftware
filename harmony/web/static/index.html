@@ -516,9 +516,20 @@
       var group = byChord[index] || [{ voices: chord, decorating: [] }];
       var split = group.length > 1;
       group.forEach(function (e, half) {
+        /* On the second half, draw only the voices that actually moved. A
+           voice that holds is one longer note - true whether the beat
+           carries a decoration leaving on the weak half or a dissonance
+           resolving on the strong one, which is why this asks the notes
+           rather than the list of what was decorated. */
+        var which = VOICES;
+        if (half) {
+          which = VOICES.filter(function (name) {
+            return e.voices[name].midi !== group[0].voices[name].midi;
+          });
+        }
         sonority(e.voices,
                  split ? (half ? x + WEAK_SHIFT : x - STRONG_SHIFT) : x,
-                 e.decorating, index, half ? e.decorating : VOICES);
+                 e.decorating, index, which);
       });
 
       /* Where a figure of the kind now selected would go. Only the ones
@@ -634,7 +645,12 @@
       var note = null, from = 0, at = 0, chord = null;
       events.forEach(function (e) {
         var midi = e.voices[name].midi;
-        if (note !== null && (midi !== note || e.chord !== chord)) {
+        /* A suspension is held across the chord boundary rather than sung
+           again, which is the exception the re-strike rule exists to allow.
+           The encoder does the same thing; the two have to agree or the
+           file and the speakers tell different stories. */
+        var crossed = e.chord !== chord && (e.tied || []).indexOf(name) < 0;
+        if (note !== null && (midi !== note || crossed)) {
           out.push({ from: from, to: at, midi: note });
           note = null;
         }

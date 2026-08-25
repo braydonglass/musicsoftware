@@ -29,13 +29,15 @@ class KindFixture(unittest.TestCase):
         self.key = Key.parse("C major")
         self.profile = Profile.load("strict")
 
-    def offers(self, progression, voicings, kind=None, voice=None):
+    def offers(self, progression, voicings, kind=None, voice=None, chord=None):
         specs = parse_progression(progression, self.key)
         found = opportunities(voicings, specs, self.key, self.profile)
         if kind:
             found = [o for o in found if o.kind == kind]
         if voice:
             found = [o for o in found if o.voice == voice]
+        if chord is not None:
+            found = [o for o in found if o.chord == chord]
         return found
 
 
@@ -93,3 +95,51 @@ class TestWeakHalfFigures(KindFixture):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def _slots(offers):
+    return sorted(o.slot for o in offers if o.available)
+
+
+class TestStrongHalfFigures(KindFixture):
+    """A dissonance on the beat, resolving to the chord after it.
+
+    V to I with the soprano falling D5 to C5: the D may be held over the
+    bar as a suspension, or leapt to as an appoggiatura from below.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.progression = "V I"
+        self.voicings = [_v("D5", "G4", "B3", "G2"),
+                         _v("C5", "G4", "C4", "C3")]
+
+    def test_a_suspension_holds_the_note_from_the_chord_before(self):
+        found = self.offers(self.progression, self.voicings,
+                            kind="suspension", voice="soprano", chord=1)
+        self.assertTrue(found)
+        self.assertEqual(str(found[0].pitch), "D5")
+        self.assertEqual(found[0].chord, 1, "it decorates the chord it hangs over")
+
+    def test_a_suspension_needs_a_step_down_into_the_chord(self):
+        """The alto holds G through both chords, so there is nothing
+        suspended and nothing to resolve."""
+        found = self.offers(self.progression, self.voicings,
+                            kind="suspension", voice="alto", chord=1)
+        self.assertEqual(found, [])
+
+    def test_an_appoggiatura_is_leapt_to(self):
+        found = self.offers(self.progression, self.voicings,
+                            kind="appoggiatura", voice="soprano", chord=1)
+        self.assertTrue(found)
+        self.assertEqual([str(o.pitch) for o in found], ["B4"],
+                         "D5 is where the soprano already was, so it is held "
+                         "rather than leapt to - that figure is the suspension")
+
+    def test_a_strong_half_figure_may_decorate_the_last_chord(self):
+        """It needs the chord before it, not the chord after, so the final
+        chord is available to it where a passing tone is not."""
+        specs = parse_progression(self.progression, self.key)
+        found = opportunities(self.voicings, specs, self.key, self.profile,
+                              kinds=STRONG_HALF)
+        self.assertTrue([o for o in found if o.chord == len(specs) - 1])

@@ -144,20 +144,19 @@ class Opportunity:
         return f"{self.chord}:{self.voice}:{self.kind}:{self.pitch}"
 
 
-def _refusal(a: Voicing, passing: Voicing, b: Voicing,
-             spec_a: ChordSpec, spec_b: ChordSpec, key: Key, index: int,
-             profile: Profile, sonority_rules, motion_rules) -> str:
-    """The first rule refusing this passing tone, or "" when none does.
+def _judge(sonority: Voicing, spec: ChordSpec, key: Key, index: int,
+           legs, profile: Profile, sonority_rules, motion_rules) -> str:
+    """The first rule refusing this sonority, or "" when none does.
 
-    The passing sonority is graded under the chord it decorates: the tone
-    sits inside that chord's beat, so spec_a is its context on both legs of
-    the move.
+    The decorated sonority is graded under the chord it decorates, and each
+    leg carries its own pair of specs, because a strong-half figure is
+    approached from the chord before while a weak-half one is left towards
+    the chord after.
     """
     violations, _ = evaluate_state(
-        StateContext(passing, spec_a, key, index, profile),
+        StateContext(sonority, spec, key, index, profile),
         sonority_rules, short_circuit=False)
 
-    legs = ((a, passing, spec_a, spec_a), (passing, b, spec_a, spec_b))
     for before, after, before_spec, after_spec in legs:
         found, _ = evaluate_transition(
             TransitionContext(a=before, b=after, spec_a=before_spec,
@@ -168,6 +167,24 @@ def _refusal(a: Voicing, passing: Voicing, b: Voicing,
 
     blocking = [v for v in violations if v.severity == "error" and not v.waived]
     return blocking[0].rule_id if blocking else ""
+
+
+def _refusal(a, passing, b, spec_a, spec_b, key, index, profile,
+             sonority_rules, motion_rules) -> str:
+    """A weak-half figure: held into from its own chord, out to the next."""
+    return _judge(passing, spec_a, key, index,
+                  ((a, passing, spec_a, spec_a), (passing, b, spec_a, spec_b)),
+                  profile, sonority_rules, motion_rules)
+
+
+def _strong_refusal(prev, sonority, resolution, spec_prev, spec, key, index,
+                    profile, sonority_rules, motion_rules) -> str:
+    """A strong-half figure: leapt or held into, resolving within the beat."""
+    legs = [(sonority, resolution, spec, spec)]
+    if prev is not None:
+        legs.insert(0, (prev, sonority, spec_prev, spec))
+    return _judge(sonority, spec, key, index, legs, profile,
+                  sonority_rules, motion_rules)
 
 
 def _weak_half_candidates(a: Voicing, b: Voicing, voice: str, key: Key,
@@ -216,6 +233,9 @@ def opportunities(voicings: list[Voicing], specs: list[ChordSpec],
     against the beat as the choices already made have left it, and what is
     offered is what will actually work.
 
+    A weak-half figure needs the chord after it and so is not offered on the
+    last beat. A strong-half one needs the chord before, and is.
+
     Refused candidates come back too, carrying the rule that forbids them.
     Whether to show them is the page's business, not this function's.
     """
@@ -225,23 +245,34 @@ def opportunities(voicings: list[Voicing], specs: list[ChordSpec],
     picked = _picks_by_chord(chosen)
 
     out: list[Opportunity] = []
-    for index in range(len(voicings) - 1):
-        a, b = voicings[index], voicings[index + 1]
-        sonority, placed, _ = _place_on_beat(
-            a, b, specs[index], specs[index + 1], index, key, profile,
+    for index in range(len(voicings)):
+        here = voicings[index]
+        prev, after, spec_prev, spec, spec_after = _beat_context(voicings, specs, index)
+        strong, weak, on_strong, on_weak, _, _ = _place_on_beat(
+            prev, here, after, spec_prev, spec, spec_after, index, key, profile,
             picked.get(index, []), sonority_rules, motion_rules)
 
         for voice in VOICE_NAMES:
-            for kind, pitch in _weak_half_candidates(a, b, voice, key, specs[index]):
-                if kind not in wanted:
-                    continue
-                if voice in placed:
-                    continue          # that voice is spoken for on this beat
-                candidate = replace(sonority, **{voice: pitch})
-                out.append(Opportunity(
-                    index, voice, pitch, kind,
-                    _refusal(a, candidate, b, specs[index], specs[index + 1], key,
-                             index, profile, sonority_rules, motion_rules)))
+            busy = voice in on_weak or voice in on_strong
+            if after is not None and not busy:
+                for kind, pitch in _weak_half_candidates(here, after, voice, key, spec):
+                    if kind not in wanted:
+                        continue
+                    candidate = replace(weak, **{voice: pitch})
+                    out.append(Opportunity(
+                        index, voice, pitch, kind,
+                        _refusal(here, candidate, after, spec, spec_after, key,
+                                 index, profile, sonority_rules, motion_rules)))
+
+            if not busy:
+                for kind, pitch in _strong_half_candidates(prev, here, voice, key, spec):
+                    if kind not in wanted:
+                        continue
+                    candidate = replace(strong, **{voice: pitch})
+                    out.append(Opportunity(
+                        index, voice, pitch, kind,
+                        _strong_refusal(prev, candidate, weak, spec_prev, spec, key,
+                                        index, profile, sonority_rules, motion_rules)))
     return out
 
 
@@ -282,6 +313,43 @@ def _parse_slot(slot):
         return None
 
 
+def _strong_half_candidates(prev: Voicing | None, here: Voicing, voice: str,
+                            key: Key, spec: ChordSpec):
+    """Notes that could sound on the first half of this beat and resolve.
+
+    Both figures put a dissonance where the chord belongs and resolve it by
+    step to the chord tone on the second half. What separates them is how
+    the dissonance is reached: a suspension is held over from the chord
+    before, an appoggiatura is leapt to.
+
+    No time signature is consulted. That the first half of a beat is
+    stronger than its second is a fact about the beat. Which beats of a bar
+    are strong is a fact about the bar, and this engine does not know it -
+    so a suspension on a weak beat cannot be refused here.
+    """
+    out = []
+    target = here[voice]
+    if prev is None:
+        # Both figures are defined by how they are reached. With no chord
+        # before this one there is nothing to hold over and nothing to leap
+        # from, so neither can be claimed.
+        return []
+
+    held = prev[voice]
+    interval, direction = melodic_interval(held, target)
+    if direction < 0 and interval.generic == 2:
+        out.append(("suspension", held))
+
+    for step in (1, -1):
+        note = step_from(target, key, step)
+        if melodic_interval(prev[voice], note)[0].generic <= 2:
+            continue          # stepped into, which is a passing shape, not a leap
+        out.append(("appoggiatura", note))
+
+    return [(kind, pitch) for kind, pitch in out
+            if pitch.pitch_class.chroma not in spec.chroma_set]
+
+
 def _picks_by_chord(chosen) -> dict:
     """Slot strings grouped by the beat they decorate."""
     out: dict[int, list[tuple[str, str, str]]] = {}
@@ -293,40 +361,84 @@ def _picks_by_chord(chosen) -> dict:
     return out
 
 
-def _place_on_beat(voicing, after, spec_a, spec_b, index, key, profile,
-                   picks, sonority_rules, motion_rules):
+def _place_on_beat(prev, voicing, after, spec_prev, spec, spec_after, index,
+                   key, profile, picks, sonority_rules, motion_rules):
     """Work the chosen figures into one beat, one at a time.
 
-    Each is judged against the sonority the ones before it have already
-    built, because two figures that are legal alone are not therefore legal
-    together. Returns what the beat became, which voices carry a figure,
-    and what had to be refused.
+    A beat carries two halves and can decorate both: a dissonance resolving
+    on the first, a decoration leaving on the second. Each figure is judged
+    against the sonority the ones before it have already built, because two
+    that are legal alone are not therefore legal together.
+
+    Returns the two halves, which voices carry a figure on each, which are
+    tied over from the chord before, and what had to be refused.
     """
-    sonority, placed, refused = voicing, [], []
+    strong, weak = voicing, voicing
+    on_strong, on_weak, tied, refused = [], [], [], []
+
+    def refuse(voice, kind, pitch, why):
+        refused.append(Opportunity(index, voice, pitch, kind, why))
+
     for voice in VOICE_NAMES:
         for want_voice, kind, note in picks:
             if want_voice != voice:
                 continue
-            if voice in placed:
-                refused.append(
-                    Opportunity(index, voice, None, kind, ALREADY_DECORATED))
+
+            if kind in STRONG_HALF:
+                if voice in on_strong or voice in on_weak:
+                    refuse(voice, kind, None, ALREADY_DECORATED)
+                    continue
+                offered = {(k, str(pc)): pc for k, pc in
+                           _strong_half_candidates(prev, voicing, voice, key, spec)}
+                pitch = offered.get((kind, note))
+                if pitch is None:
+                    refuse(voice, kind, None, DOES_NOT_FIT)
+                    continue
+                candidate = replace(strong, **{voice: pitch})
+                why = _strong_refusal(prev, candidate, weak, spec_prev, spec, key,
+                                      index, profile, sonority_rules, motion_rules)
+                if why:
+                    refuse(voice, kind, pitch, why)
+                    continue
+                strong = candidate
+                on_strong.append(voice)
+                if kind == "suspension":
+                    # Held over rather than struck again, which is the whole
+                    # point of it and which the encoder has to be told.
+                    tied.append(voice)
+                continue
+
+            if after is None:
+                refuse(voice, kind, None, DOES_NOT_FIT)   # nothing to move into
+                continue
+            if voice in on_weak or voice in on_strong:
+                refuse(voice, kind, None, ALREADY_DECORATED)
                 continue
             offered = {(k, str(pc)): pc for k, pc in
-                       _weak_half_candidates(voicing, after, voice, key, spec_a)}
+                       _weak_half_candidates(voicing, after, voice, key, spec)}
             pitch = offered.get((kind, note))
             if pitch is None:
-                refused.append(
-                    Opportunity(index, voice, None, kind, DOES_NOT_FIT))
+                refuse(voice, kind, None, DOES_NOT_FIT)
                 continue
-            candidate = replace(sonority, **{voice: pitch})
-            why = _refusal(voicing, candidate, after, spec_a, spec_b, key,
+            candidate = replace(weak, **{voice: pitch})
+            why = _refusal(voicing, candidate, after, spec, spec_after, key,
                            index, profile, sonority_rules, motion_rules)
             if why:
-                refused.append(Opportunity(index, voice, pitch, kind, why))
+                refuse(voice, kind, pitch, why)
                 continue
-            sonority = candidate
-            placed.append(voice)
-    return sonority, placed, refused
+            weak = candidate
+            on_weak.append(voice)
+
+    return strong, weak, on_strong, on_weak, tied, refused
+
+
+def _beat_context(voicings, specs, index):
+    """The chord before, the chord after, and the specs that go with them."""
+    prev = voicings[index - 1] if index else None
+    after = voicings[index + 1] if index + 1 < len(voicings) else None
+    spec = specs[index]
+    return (prev, after, specs[index - 1] if index else spec,
+            spec, specs[index + 1] if after is not None else spec)
 
 
 def apply(voicings: list[Voicing], specs: list[ChordSpec], key: Key,
@@ -351,20 +463,22 @@ def apply(voicings: list[Voicing], specs: list[ChordSpec], key: Key,
 
     for index, voicing in enumerate(voicings):
         picks = picked.get(index, [])
-        # The last chord has nothing to decorate into.
-        if not picks or index >= len(voicings) - 1:
+        if not picks:
             events.append(Event(voicing, 1.0, index))
             continue
 
-        sonority, placed, said_no = _place_on_beat(
-            voicing, voicings[index + 1], specs[index], specs[index + 1], index,
-            key, profile, picks, sonority_rules, motion_rules)
+        prev, after, spec_prev, spec, spec_after = _beat_context(voicings, specs, index)
+        strong, weak, on_strong, on_weak, tied, said_no = _place_on_beat(
+            prev, voicing, after, spec_prev, spec, spec_after, index, key,
+            profile, picks, sonority_rules, motion_rules)
         refused += said_no
 
-        if not placed:
+        if not on_strong and not on_weak:
             events.append(Event(voicing, 1.0, index))
             continue
-        events.append(Event(voicing, 0.5, index))
-        events.append(Event(sonority, 0.5, index, tuple(placed)))
+        # The beat splits once whatever is on it: a dissonance resolving on
+        # the first half, a decoration leaving on the second, or both.
+        events.append(Event(strong, 0.5, index, tuple(on_strong), tuple(tied)))
+        events.append(Event(weak, 0.5, index, tuple(on_weak)))
 
     return events, refused

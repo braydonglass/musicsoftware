@@ -56,3 +56,38 @@ class TestBytes(unittest.TestCase):
         held = [(s, e) for s, e, n in timeline(events)
                 if n == Pitch.parse("G3").midi][0]
         self.assertEqual((held[1] - held[0]) * TICKS_PER_BEAT, TICKS_PER_BEAT)
+
+
+V_CHORD   = _v("D5", "G4", "B3", "G2")
+SUSPENDED = _v("D5", "G4", "C4", "C3")     # the tonic, soprano still on D
+RESOLVED  = _v("C5", "G4", "C4", "C3")
+
+
+class TestSuspensionsAreHeld(unittest.TestCase):
+    """A suspension is a note held over, not a note struck again.
+
+    Everywhere else a repeated pitch under a new chord is re-articulated,
+    because the harmony beneath it changed. The suspension is the exception
+    the rule exists to allow, and the encoder has to be told which voice it
+    is: that is what Event.tied carries.
+    """
+
+    def events(self):
+        return [Event(V_CHORD, 1.0, 0),
+                Event(SUSPENDED, 0.5, 1, ("soprano",), ("soprano",)),
+                Event(RESOLVED, 0.5, 1)]
+
+    def sounding(self, midi_note):
+        return [(start, end) for start, end, note in timeline(self.events())
+                if note == midi_note]
+
+    def test_the_suspended_note_sounds_once_across_the_bar(self):
+        self.assertEqual(self.sounding(Pitch.parse("D5").midi), [(0.0, 1.5)])
+
+    def test_and_then_the_resolution_sounds(self):
+        self.assertEqual(self.sounding(Pitch.parse("C5").midi), [(1.5, 2.0)])
+
+    def test_a_voice_that_is_not_tied_is_struck_again(self):
+        """The alto holds G through both chords and is sung twice."""
+        self.assertEqual(self.sounding(Pitch.parse("G4").midi),
+                         [(0.0, 1.0), (1.0, 2.0)])
