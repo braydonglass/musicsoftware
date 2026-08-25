@@ -96,11 +96,11 @@
   .spot.refused:hover circle { stroke: var(--red); }
   /* a placed passing tone is drawn hollow, the way a non-chord tone is heard:
      it belongs to the line, not to the chord */
-  .passing .head { fill: none; stroke-width: 1.8; }
-  .passing.v-soprano .head { stroke: var(--v-soprano); }
-  .passing.v-alto    .head { stroke: var(--v-alto); }
-  .passing.v-tenor   .head { stroke: var(--v-tenor); }
-  .passing.v-bass    .head { stroke: var(--v-bass); }
+  .figure .head { fill: none; stroke-width: 1.8; }
+  .figure.v-soprano .head { stroke: var(--v-soprano); }
+  .figure.v-alto    .head { stroke: var(--v-alto); }
+  .figure.v-tenor   .head { stroke: var(--v-tenor); }
+  .figure.v-bass    .head { stroke: var(--v-bass); }
 
   /* ---- controls at the bottom ---- */
   .controls { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; }
@@ -241,6 +241,11 @@
     </div>
 
     <div class="field">
+      <label for="figure">Embellishment</label>
+      <select id="figure"></select>
+    </div>
+
+    <div class="field">
       <label for="tempo">Tempo</label>
       <div class="tempo-row">
         <input type="range" id="tempo" min="40" max="200" step="2" value="84">
@@ -251,6 +256,8 @@
     <button class="primary" id="go">Realize</button>
     <button id="keep" disabled
             title="Hold this soprano. Add a chord and the tune stays; only the new chord is left for the engine.">Keep soprano</button>
+    <button id="addAll" disabled
+            title="Place every one of these that fits, everywhere it fits">Add all</button>
     <button id="play" disabled>Play</button>
     <a id="export" class="export" href="#" download>Export MIDI</a>
   </div>
@@ -309,6 +316,18 @@
     flat:  { treble: [34, 37, 33, 36, 32, 35, 31], bass: [20, 23, 19, 22, 18, 21, 17] },
   };
   var VOICES = ["soprano", "alto", "tenor", "bass"];
+
+  /* The figures the engine can place, in the order the menu offers them.
+     The first four decorate the weak half of a beat; the last two put a
+     dissonance on the strong half and resolve it after. */
+  var FIGURE_NAMES = {
+    passing: "passing tone",
+    neighbour: "neighbour tone",
+    anticipation: "anticipation",
+    escape: "escape tone",
+    suspension: "suspension",
+    appoggiatura: "appoggiatura",
+  };
   var STEM_UP = { soprano: true, alto: false, tenor: true, bass: false };
   var LETTERS = "CDEFGAB";
 
@@ -335,13 +354,11 @@
   /* Passing tones the writer has clicked, as "chord:voice". The engine finds
      where one will fit; which of those to take is nobody's choice but the
      writer's, so this lives here and is sent with every realization. */
-  var chosen = {};
-  function key_(chord, voice) { return chord + ":" + voice; }
-  function chosenList() {
-    return Object.keys(chosen).map(function (k) {
-      var parts = k.split(":");
-      return [+parts[0], parts[1]];
-    });
+  var chosen = {};                 // slot string -> true, as the engine writes it
+  function chosenList() { return Object.keys(chosen); }
+  function currentKind() {
+    var box = document.getElementById("figure");
+    return box ? box.value : "passing";
   }
 
   /* Whether the realized soprano is held across re-realizations. */
@@ -449,14 +466,18 @@
       which.forEach(function (name) {
         var note = voices[name], d = dia(note), y = yOf(d);
         var decorating = (passing || []).indexOf(name) >= 0;
-        var group = el("g", { "class": "v-" + name + (decorating ? " passing spot" : "") });
+        var group = el("g", { "class": "v-" + name + (decorating ? " figure spot" : "") });
         if (decorating) {
-          group.dataset.chord = index;
-          group.dataset.voice = name;
-          group.dataset.placed = "1";
+          /* Find the slot this note came from, so clicking it takes it out
+             again - whatever the menu is showing at the time. */
+          var mine = Object.keys(chosen).filter(function (slot) {
+            var parts = slot.split(":");
+            return +parts[0] === index && parts[1] === name;
+          })[0];
+          if (mine) group.dataset.slot = mine;
           var off = document.createElementNS(SVGNS, "title");
-          off.textContent = "passing tone (" + name + " " + note.name +
-                            ") - click to take it out";
+          off.textContent = (mine ? FIGURE_NAMES[mine.split(":")[2]] : "figure") +
+                            " (" + name + " " + note.name + ") - click to take it out";
           group.appendChild(off);
         }
         score.appendChild(group);
@@ -492,30 +513,31 @@
       hit.dataset.index = index;
       score.appendChild(hit);
 
-      var group = byChord[index] || [{ voices: chord, passing: [] }];
+      var group = byChord[index] || [{ voices: chord, decorating: [] }];
       var split = group.length > 1;
       group.forEach(function (e, half) {
         sonority(e.voices,
                  split ? (half ? x + WEAK_SHIFT : x - STRONG_SHIFT) : x,
-                 e.passing, index, half ? e.passing : VOICES);
+                 e.decorating, index, half ? e.decorating : VOICES);
       });
 
-      /* Where a passing tone would go, and where one would be refused. The
-         engine finds the places; taking them is the writer's business, so
-         nothing here sounds until it is clicked. */
+      /* Where a figure of the kind now selected would go. Only the ones
+         that will actually take are drawn: the engine measures them against
+         the choices already made, so a ring here is a ring that works.
+         Showing the refused ones as well was noise - a note offered and
+         then declined teaches nothing the click would not. */
       offers.forEach(function (o) {
         if (o.chord !== index || !o.note) return;
-        if (chosen[key_(o.chord, o.voice)] && !o.refusedBy) return;   // drawn as a note
-        var spot = el("g", { "class": "spot" + (o.refusedBy ? " refused" : "") });
-        spot.dataset.chord = o.chord;
-        spot.dataset.voice = o.voice;
-        spot.dataset.refused = o.refusedBy || "";
+        if (o.refusedBy) return;
+        if (o.kind !== currentKind()) return;
+        if (chosen[o.slot]) return;                 // already drawn as a note
+        var spot = el("g", { "class": "spot" });
+        spot.dataset.slot = o.slot;
         spot.appendChild(el("circle",
           { cx: x + WEAK_SHIFT, cy: yOf(dia(o.note)), r: 7 }));
         var why = document.createElementNS(SVGNS, "title");
-        why.textContent = o.refusedBy
-          ? o.voice + " " + o.note.name + " would break " + o.refusedBy
-          : "add a passing tone: " + o.voice + " " + o.note.name;
+        why.textContent = "add a " + (FIGURE_NAMES[o.kind] || o.kind) +
+                          ": " + o.voice + " " + o.note.name;
         spot.appendChild(why);
         score.appendChild(spot);
       });
@@ -534,13 +556,8 @@
      because why it cannot go there is the part worth knowing. */
   score.addEventListener("click", function (event) {
     var spot = event.target.closest && event.target.closest(".spot");
-    if (!spot) return;
-    if (spot.dataset.refused) {
-      setStatus("a passing tone there would break " + spot.dataset.refused +
-                " - the decoration makes the fault, not the chords", "err");
-      return;
-    }
-    var slot = key_(+spot.dataset.chord, spot.dataset.voice);
+    if (!spot || !spot.dataset.slot) return;
+    var slot = spot.dataset.slot;
     if (chosen[slot]) delete chosen[slot]; else chosen[slot] = true;
     realize(true);
   });
@@ -653,7 +670,7 @@
        the same chord and does not light it again */
     var at = 0, total = 0;
     events.forEach(function (e) {
-      if (!e.passing.length) {
+      if (!e.decorating.length) {
         var when = at, which = e.chord;
         timers.push(setTimeout(function () { highlight(which); },
           (start - audio.currentTime + when * beat) * 1000));
@@ -694,7 +711,7 @@
       tempo: document.getElementById("tempo").value,
       soprano: melodyText(),
       alt: String(currentIndex),
-      passing: Object.keys(chosen).join(","),
+      figures: Object.keys(chosen).join(","),
     }).toString();
   }
 
@@ -867,7 +884,7 @@
         profile: document.getElementById("profile").value,
         soprano: melodyText(),
         alternates: 3,
-        passing: chosenList(),
+        figures: chosenList(),
       }),
     })
       .then(function (r) { return r.json(); })
@@ -880,6 +897,7 @@
           renderAlternates(null);
           document.getElementById("play").disabled = true;
           document.getElementById("keep").disabled = true;
+          document.getElementById("addAll").disabled = true;
           updateExport();
           setStatus(payload.error, "err");
           return;
@@ -890,13 +908,14 @@
         /* A re-realization can move the voicing a choice was made against,
            and a passing tone that no longer fits is not silently kept. */
         var lost = payload.results[currentIndex].refused || [];
-        lost.forEach(function (r) { delete chosen[key_(r.chord, r.voice)]; });
+        lost.forEach(function (r) { if (r.slot) delete chosen[r.slot]; });
 
         draw(payload, currentIndex);
         renderAlternates(payload);
         renderExceptions(payload);
         document.getElementById("play").disabled = false;
         document.getElementById("keep").disabled = false;
+        document.getElementById("addAll").disabled = false;
         if (keeping) captureSoprano(payload);
         updateExport();
         var swaps = payload.results[currentIndex].substitutions || [];
@@ -979,6 +998,40 @@
   tempo.addEventListener("input", function () {
     document.getElementById("tempoVal").textContent = tempo.value + " bpm";
     updateExport();          // the exported file carries the tempo
+  });
+
+  var figureBox = document.getElementById("figure");
+  Object.keys(FIGURE_NAMES).forEach(function (kind) {
+    var option = document.createElement("option");
+    option.value = kind;
+    option.textContent = FIGURE_NAMES[kind];
+    figureBox.appendChild(option);
+  });
+  figureBox.value = "passing";
+  figureBox.addEventListener("change", function () {
+    /* Only which offers are drawn changes. Anything already placed stays
+       placed: the notes come from the engine's events, which know nothing
+       about what this menu is showing. */
+    if (current && current.ok) draw(current, currentIndex);
+  });
+
+  document.getElementById("addAll").addEventListener("click", function () {
+    if (!current || !current.ok) return;
+    var kind = currentKind();
+    var before = Object.keys(chosen).length;
+    (current.results[currentIndex].opportunities || []).forEach(function (o) {
+      if (o.refusedBy || o.kind !== kind || chosen[o.slot]) return;
+      chosen[o.slot] = true;
+    });
+    var added = Object.keys(chosen).length - before;
+    if (!added) {
+      setStatus("no " + FIGURE_NAMES[kind] + " fits anywhere in this realization");
+      return;
+    }
+    /* Offers were measured one at a time against what was already chosen,
+       so taking several at once can still find two that clash. The engine
+       refuses those and the refusals prune them back out. */
+    realize(true);
   });
 
   var keepButton = document.getElementById("keep");

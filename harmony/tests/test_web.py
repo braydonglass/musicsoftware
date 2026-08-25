@@ -22,7 +22,8 @@ class TestOpportunitiesInThePayload(unittest.TestCase):
         result = self.payload()["results"][0]
         self.assertIn("opportunities", result)
         offer = result["opportunities"][0]
-        self.assertEqual(sorted(offer), ["chord", "note", "refusedBy", "voice"])
+        self.assertEqual(sorted(offer),
+                         ["chord", "kind", "note", "refusedBy", "slot", "voice"])
 
     def test_an_undecorated_result_is_one_whole_beat_per_chord(self):
         result = self.payload()["results"][0]
@@ -31,15 +32,15 @@ class TestOpportunitiesInThePayload(unittest.TestCase):
     def test_a_chosen_passing_tone_splits_its_beat(self):
         offers = self.payload()["results"][0]["opportunities"]
         free = [o for o in offers if not o["refusedBy"]][0]
-        result = self.payload(passing=[[free["chord"], free["voice"]]])["results"][0]
+        result = self.payload(figures=[free["slot"]])["results"][0]
         self.assertEqual(len(result["events"]), 6)
         self.assertEqual([e["beats"] for e in result["events"][:2]], [0.5, 0.5])
-        self.assertEqual(result["events"][1]["passing"], [free["voice"]])
+        self.assertEqual(result["events"][1]["decorating"], [free["voice"]])
 
     def test_a_passing_event_carries_drawable_notes_for_all_four_voices(self):
         offers = self.payload()["results"][0]["opportunities"]
         free = [o for o in offers if not o["refusedBy"]][0]
-        result = self.payload(passing=[[free["chord"], free["voice"]]])["results"][0]
+        result = self.payload(figures=[free["slot"]])["results"][0]
         voices = result["events"][1]["voices"]
         self.assertEqual(sorted(voices), ["alto", "bass", "soprano", "tenor"])
         self.assertIn("midi", voices["soprano"])
@@ -64,9 +65,18 @@ class TestPartlyPinnedMelody(unittest.TestCase):
 class TestMidiExport(unittest.TestCase):
     BASE = {"key": "C major", "progression": "I vi IV V I", "profile": "strict"}
 
+    def free_slot(self):
+        """A figure the engine actually offers for this progression."""
+        payload = realize_payload("C major", "I vi IV V I", "strict", 1)
+        for offer in payload["results"][0]["opportunities"]:
+            if not offer["refusedBy"]:
+                return offer["slot"]
+        self.fail("the engine offers nothing to decorate here")
+
     def test_the_exported_file_carries_the_chosen_passing_tones(self):
         plain, _ = midi_for(dict(self.BASE))
-        decorated, _ = midi_for(dict(self.BASE, passing="0:bass"))
+        free = self.free_slot()
+        decorated, _ = midi_for(dict(self.BASE, figures=free))
         self.assertNotEqual(plain, decorated)
         self.assertGreater(len(decorated), len(plain))
 
@@ -77,5 +87,5 @@ class TestMidiExport(unittest.TestCase):
     def test_an_unavailable_choice_is_ignored_rather_than_fatal(self):
         """A stale click must not break the download."""
         plain, _ = midi_for(dict(self.BASE))
-        stale, _ = midi_for(dict(self.BASE, passing="0:soprano"))
+        stale, _ = midi_for(dict(self.BASE, figures="0:soprano:passing:Z9"))
         self.assertEqual(plain, stale)

@@ -80,18 +80,68 @@ SONORITY_RULES = (
 # tone moves by step by construction, so neither can ever fire.
 
 
+# Where each figure sits in the beat it decorates. The weak-half figures
+# leave the chord sounding on the beat and decorate after it; the strong-half
+# ones put a dissonance on the beat and resolve to the chord after it.
+#
+# No time signature is involved in that distinction. The first half of a beat
+# is stronger than its second, which is a fact about the beat. Which *beats*
+# of a bar are strong is a fact about the bar, and this module still does not
+# know it - see the limit recorded in the README.
+WEAK_HALF = ("passing", "neighbour", "anticipation", "escape")
+STRONG_HALF = ("suspension", "appoggiatura")
+KINDS = WEAK_HALF + STRONG_HALF
+
+LABELS = {
+    "passing": "passing tone",
+    "neighbour": "neighbour tone",
+    "anticipation": "anticipation",
+    "escape": "escape tone",
+    "suspension": "suspension",
+    "appoggiatura": "appoggiatura",
+}
+
+
+def step_from(pitch: Pitch, key: Key, direction: int) -> Pitch:
+    """The next letter up or down, spelled by the key signature.
+
+    The same commitment as everywhere else: the letter comes first and the
+    accidental follows from the key, so the neighbour above B in C major is
+    C and never B-sharp.
+    """
+    ladder = pitch.diatonic_index + direction
+    letter = ladder % 7
+    return Pitch(letter, ladder // 7, key.signature()[letter])
+
+
 @dataclass(frozen=True)
 class Opportunity:
-    """A place a passing tone will go, and whether it may."""
+    """A place a figure will go, and whether it may.
 
-    chord: int          # the tone sits on the weak half of this chord's beat
+    ``chord`` is the beat being decorated. A weak-half figure decorates the
+    second half of that chord's beat and needs the chord after it; a
+    strong-half one decorates the first half and, for a suspension, needs
+    the chord before.
+    """
+
+    chord: int
     voice: str
     pitch: Pitch | None
+    kind: str = "passing"
     refused_by: str = ""    # the rule that forbids it; empty when it is free
 
     @property
     def available(self) -> bool:
         return not self.refused_by
+
+    @property
+    def slot(self) -> str:
+        """What the writer clicked, as one string.
+
+        A neighbour offers two notes in the same voice on the same beat, so
+        the pitch has to be part of what identifies a choice.
+        """
+        return f"{self.chord}:{self.voice}:{self.kind}:{self.pitch}"
 
 
 def _refusal(a: Voicing, passing: Voicing, b: Voicing,
@@ -120,37 +170,89 @@ def _refusal(a: Voicing, passing: Voicing, b: Voicing,
     return blocking[0].rule_id if blocking else ""
 
 
-def opportunities(voicings: list[Voicing], specs: list[ChordSpec],
-                  key: Key, profile: Profile) -> list[Opportunity]:
-    """Every place a passing tone would go, refused ones included.
+def _weak_half_candidates(a: Voicing, b: Voicing, voice: str, key: Key,
+                          spec: ChordSpec):
+    """Every note that could decorate the second half of this beat.
 
-    Refusals are reported rather than dropped. Where a passing tone cannot
-    go is worth as much to a writer as where one can, and the rule that
-    forbids it is the lesson.
+    Yields (kind, pitch). A candidate that happens to be a tone of the chord
+    it decorates is dropped: a non-chord tone that belongs to the chord is
+    not a figure, it is just the chord.
     """
+    here, there = a[voice], b[voice]
+    out = []
+
+    filled = filling(here, there, key)
+    if filled is not None:
+        out.append(("passing", filled))
+
+    if here.midi == there.midi and here.diatonic_index == there.diatonic_index:
+        # A held note has nowhere to anticipate and nothing to escape from,
+        # but it is exactly what a neighbour decorates.
+        out.append(("neighbour", step_from(here, key, 1)))
+        out.append(("neighbour", step_from(here, key, -1)))
+    else:
+        _, direction = melodic_interval(here, there)
+        out.append(("anticipation", there))
+        # The escape steps away from where the line is going and then leaps
+        # back across it, which is what makes it an escape rather than a
+        # passing tone.
+        escape = step_from(here, key, -direction)
+        if melodic_interval(escape, there)[0].generic > 2:
+            out.append(("escape", escape))
+
+    return [(kind, pitch) for kind, pitch in out
+            if pitch.pitch_class.chroma not in spec.chroma_set]
+
+
+def opportunities(voicings: list[Voicing], specs: list[ChordSpec],
+                  key: Key, profile: Profile, kinds=None,
+                  chosen=()) -> list[Opportunity]:
+    """Every place a figure would go, judged against what is already there.
+
+    ``chosen`` matters more than it looks. Judging each candidate against
+    the bare chord shows a writer a note that will refuse itself the moment
+    it is clicked, because by then another figure on the same beat has
+    changed the sonority it has to fit. Offers are therefore measured
+    against the beat as the choices already made have left it, and what is
+    offered is what will actually work.
+
+    Refused candidates come back too, carrying the rule that forbids them.
+    Whether to show them is the page's business, not this function's.
+    """
+    wanted = tuple(kinds) if kinds is not None else KINDS
     sonority_rules = [r for r in profile.rules("state") if r.id in SONORITY_RULES]
     motion_rules = [r for r in profile.rules("transition") if r.id in MOTION_RULES]
+    picked = _picks_by_chord(chosen)
 
     out: list[Opportunity] = []
     for index in range(len(voicings) - 1):
         a, b = voicings[index], voicings[index + 1]
+        sonority, placed, _ = _place_on_beat(
+            a, b, specs[index], specs[index + 1], index, key, profile,
+            picked.get(index, []), sonority_rules, motion_rules)
+
         for voice in VOICE_NAMES:
-            pitch = filling(a[voice], b[voice], key)
-            if pitch is None:
-                continue
-            passing = replace(a, **{voice: pitch})
-            out.append(Opportunity(
-                index, voice, pitch,
-                _refusal(a, passing, b, specs[index], specs[index + 1], key,
-                         index, profile, sonority_rules, motion_rules)))
+            for kind, pitch in _weak_half_candidates(a, b, voice, key, specs[index]):
+                if kind not in wanted:
+                    continue
+                if voice in placed:
+                    continue          # that voice is spoken for on this beat
+                candidate = replace(sonority, **{voice: pitch})
+                out.append(Opportunity(
+                    index, voice, pitch, kind,
+                    _refusal(a, candidate, b, specs[index], specs[index + 1], key,
+                             index, profile, sonority_rules, motion_rules)))
     return out
 
 
-# What a choice is refused with when the voice does not move by a third at
-# all. Not a rule id: no rule is involved, there is simply nothing to fill.
-# The web layer can send a stale choice after a re-realization changes the
-# voicing under it, so this has to be answerable rather than fatal.
-NO_THIRD = "no_third_to_fill"
+# What a choice is refused with when it no longer fits the voicing under it -
+# a re-realization can move the notes a slot was measured against. Not a rule
+# id: no rule is involved, the figure simply has nowhere to go.
+DOES_NOT_FIT = "no_longer_fits_here"
+
+# One voice can carry one figure per beat. Asking for two is not a rule
+# violation either, just an impossibility.
+ALREADY_DECORATED = "voice_already_decorated"
 
 
 @dataclass(frozen=True)
@@ -158,61 +260,106 @@ class Event:
     """One sounding moment: a full sonority and how long it lasts.
 
     An undecorated chord is a single event of one beat, so a realization
-    with no passing tones in it reads exactly as it did before there were
-    any. A decorated one is two events of half a beat, the second carrying
-    the passing tones.
+    with no figures in it reads exactly as it did before there were any. A
+    decorated one is two events of half a beat.
     """
 
     voicing: Voicing
     beats: float
-    chord: int                      # which chord of the progression this is
-    passing: tuple[str, ...] = ()   # voices sounding a non-chord tone here
+    chord: int                          # which chord of the progression this is
+    decorating: tuple[str, ...] = ()    # voices sounding a non-chord tone here
+    tied: tuple[str, ...] = ()          # voices held over from the event before
+
+
+def _parse_slot(slot):
+    """A slot string back into its parts, or None if it is not one."""
+    parts = str(slot).split(":")
+    if len(parts) != 4:
+        return None
+    try:
+        return int(parts[0]), parts[1], parts[2], parts[3]
+    except ValueError:
+        return None
+
+
+def _picks_by_chord(chosen) -> dict:
+    """Slot strings grouped by the beat they decorate."""
+    out: dict[int, list[tuple[str, str, str]]] = {}
+    for slot in chosen or ():
+        parsed = _parse_slot(slot)
+        if parsed:
+            index, voice, kind, note = parsed
+            out.setdefault(index, []).append((voice, kind, note))
+    return out
+
+
+def _place_on_beat(voicing, after, spec_a, spec_b, index, key, profile,
+                   picks, sonority_rules, motion_rules):
+    """Work the chosen figures into one beat, one at a time.
+
+    Each is judged against the sonority the ones before it have already
+    built, because two figures that are legal alone are not therefore legal
+    together. Returns what the beat became, which voices carry a figure,
+    and what had to be refused.
+    """
+    sonority, placed, refused = voicing, [], []
+    for voice in VOICE_NAMES:
+        for want_voice, kind, note in picks:
+            if want_voice != voice:
+                continue
+            if voice in placed:
+                refused.append(
+                    Opportunity(index, voice, None, kind, ALREADY_DECORATED))
+                continue
+            offered = {(k, str(pc)): pc for k, pc in
+                       _weak_half_candidates(voicing, after, voice, key, spec_a)}
+            pitch = offered.get((kind, note))
+            if pitch is None:
+                refused.append(
+                    Opportunity(index, voice, None, kind, DOES_NOT_FIT))
+                continue
+            candidate = replace(sonority, **{voice: pitch})
+            why = _refusal(voicing, candidate, after, spec_a, spec_b, key,
+                           index, profile, sonority_rules, motion_rules)
+            if why:
+                refused.append(Opportunity(index, voice, pitch, kind, why))
+                continue
+            sonority = candidate
+            placed.append(voice)
+    return sonority, placed, refused
 
 
 def apply(voicings: list[Voicing], specs: list[ChordSpec], key: Key,
           profile: Profile, chosen) -> tuple[list[Event], list[Opportunity]]:
-    """Place the passing tones a writer has chosen.
+    """Place the figures a writer has chosen.
+
+    ``chosen`` is a list of slot strings, as ``Opportunity.slot`` writes
+    them. The candidates are rebuilt here rather than trusted from the
+    slot, so a stale click cannot smuggle in a note that no longer fits.
 
     Returns the events to sound and whatever had to be refused. Choices are
-    taken one voice at a time and each is judged against the sonority the
-    ones before it have already built: two passing tones that are each
-    legal alone are not therefore legal together, and the second is the one
-    that gets refused.
+    taken one at a time and each is judged against the sonority the ones
+    before it have already built: two figures that are each legal alone are
+    not therefore legal together, and the second is the one refused.
     """
     sonority_rules = [r for r in profile.rules("state") if r.id in SONORITY_RULES]
     motion_rules = [r for r in profile.rules("transition") if r.id in MOTION_RULES]
 
-    wanted: dict[int, set[str]] = {}
-    for index, voice in chosen:
-        wanted.setdefault(index, set()).add(voice)
-
+    picked = _picks_by_chord(chosen)
     events: list[Event] = []
     refused: list[Opportunity] = []
 
     for index, voicing in enumerate(voicings):
-        # The last chord has nothing to pass into.
-        voices = [v for v in VOICE_NAMES
-                  if v in wanted.get(index, ()) and index < len(voicings) - 1]
-        if not voices:
+        picks = picked.get(index, [])
+        # The last chord has nothing to decorate into.
+        if not picks or index >= len(voicings) - 1:
             events.append(Event(voicing, 1.0, index))
             continue
 
-        after = voicings[index + 1]
-        sonority, placed = voicing, []
-        for voice in voices:
-            pitch = filling(voicing[voice], after[voice], key)
-            if pitch is None:
-                refused.append(Opportunity(index, voice, None, NO_THIRD))
-                continue
-            candidate = replace(sonority, **{voice: pitch})
-            why = _refusal(voicing, candidate, after, specs[index],
-                           specs[index + 1], key, index, profile,
-                           sonority_rules, motion_rules)
-            if why:
-                refused.append(Opportunity(index, voice, pitch, why))
-                continue
-            sonority = candidate
-            placed.append(voice)
+        sonority, placed, said_no = _place_on_beat(
+            voicing, voicings[index + 1], specs[index], specs[index + 1], index,
+            key, profile, picks, sonority_rules, motion_rules)
+        refused += said_no
 
         if not placed:
             events.append(Event(voicing, 1.0, index))

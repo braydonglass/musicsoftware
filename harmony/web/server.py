@@ -18,7 +18,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 from ..core.checker import check, errors_only, explained_breaks
-from ..core.embellish import apply as place_passing
+from ..core.embellish import apply as place_figures
 from ..core.embellish import opportunities
 from ..core.key import Key
 from ..core.melody import HOLE, candidates_for, parse_soprano
@@ -72,22 +72,15 @@ def candidates_payload(request: dict) -> dict:
     }
 
 
-def parse_passing(text: str) -> list[tuple[int, str]]:
-    """Read the page's shorthand for chosen passing tones: "0:soprano,2:tenor".
+def parse_figures(text: str) -> list[str]:
+    """Read the page's list of chosen figures from a URL.
 
-    Anything unreadable is dropped rather than raised on. These arrive in a
-    URL, and a stale or hand-edited one should still produce music.
+    Each one is a slot as Opportunity.slot writes it - chord, voice, kind
+    and note joined by colons - and they are separated by commas. Nothing
+    is validated here; apply() rebuilds the candidates and refuses whatever
+    no longer fits, which is what a stale or hand-edited URL deserves.
     """
-    out = []
-    for token in text.split(","):
-        chord, _, voice = token.strip().partition(":")
-        if voice not in VOICE_NAMES:
-            continue
-        try:
-            out.append((int(chord), voice))
-        except ValueError:
-            continue
-    return out
+    return [token.strip() for token in text.split(",") if token.strip()]
 
 
 def midi_for(params: dict) -> tuple[bytes, str]:
@@ -106,8 +99,8 @@ def midi_for(params: dict) -> tuple[bytes, str]:
 
     results = solve(specs, key, profile, k=index + 1, soprano=melody)
     result = results[min(index, len(results) - 1)]
-    events, _ = place_passing(result.voicings, result.specs or specs, key, profile,
-                              parse_passing(params.get("passing") or ""))
+    events, _ = place_figures(result.voicings, result.specs or specs, key, profile,
+                              parse_figures(params.get("figures") or ""))
 
     data = midi_bytes(events, tempo_bpm=float(params.get("tempo") or 84),
                       meter=FIXED_METER)
@@ -118,21 +111,24 @@ def midi_for(params: dict) -> tuple[bytes, str]:
 
 def realize_payload(key_text: str, progression: str, profile_name: str,
                     alternates: int, soprano_text: str = "",
-                    passing=None) -> dict:
+                    figures=None) -> dict:
     key = Key.parse(key_text)
     profile = Profile.load(profile_name)
     specs = parse_progression(progression, key)
     melody = parse_soprano(soprano_text) if soprano_text.strip() else None
     width = max(1, min(alternates, 5))
     results = solve(specs, key, profile, k=width, soprano=melody)
-    chosen = [(int(chord), str(voice)) for chord, voice in (passing or [])]
+    chosen = [str(slot) for slot in (figures or [])]
 
     out = []
     for result in results:
         used = result.specs or specs
         graded = check(result.voicings, used, key, profile)
-        offers = opportunities(result.voicings, used, key, profile)
-        events, refused = place_passing(result.voicings, used, key, profile, chosen)
+        # judged against what is already chosen, so an offer the page
+        # draws is an offer that will take
+        offers = opportunities(result.voicings, used, key, profile,
+                               chosen=chosen)
+        events, refused = place_figures(result.voicings, used, key, profile, chosen)
         out.append({
             "cost": round(result.cost, 3),
             "numerals": [sp.numeral for sp in used],
@@ -155,20 +151,22 @@ def realize_payload(key_text: str, progression: str, profile_name: str,
                 for v in result.voicings
             ],
             "opportunities": [
-                {"chord": o.chord, "voice": o.voice,
+                {"chord": o.chord, "voice": o.voice, "kind": o.kind,
+                 "slot": o.slot,
                  "note": _note(o.pitch, key) if o.pitch else None,
                  "refusedBy": o.refused_by}
                 for o in offers
             ],
             "events": [
                 {"beats": e.beats, "chord": e.chord,
-                 "passing": list(e.passing),
+                 "decorating": list(e.decorating), "tied": list(e.tied),
                  "voices": {name: _note(e.voicing[name], key)
                             for name in VOICE_NAMES}}
                 for e in events
             ],
             "refused": [
-                {"chord": o.chord, "voice": o.voice, "refusedBy": o.refused_by}
+                {"chord": o.chord, "voice": o.voice, "kind": o.kind,
+                 "slot": o.slot, "refusedBy": o.refused_by}
                 for o in refused
             ],
         })
@@ -266,7 +264,7 @@ class Handler(BaseHTTPRequestHandler):
                 profile_name=request.get("profile", "strict"),
                 alternates=int(request.get("alternates", 1)),
                 soprano_text=request.get("soprano", "") or "",
-                passing=request.get("passing") or [],
+                figures=request.get("figures") or [],
             )
         except (RomanNumeralError, NoRealization, ValueError, FileNotFoundError) as exc:
             # These carry the explanation the engine worked out; pass it through

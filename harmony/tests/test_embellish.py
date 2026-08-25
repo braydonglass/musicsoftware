@@ -68,8 +68,9 @@ class TestOpportunities(unittest.TestCase):
 
     def test_nothing_is_offered_where_no_voice_moves_by_a_third(self):
         """Steps, leaps and held notes are not passing figures."""
-        found = self.offered(
+        found = [o for o in self.offered(
             [_v("E4", "C4", "G3", "C3"), _v("D4", "B3", "G3", "G2")], "I V")
+            if o.kind == "passing"]
         self.assertEqual(found, [])
 
     def test_a_passing_tone_making_parallel_fourths_is_refused_by_name(self):
@@ -82,7 +83,7 @@ class TestOpportunities(unittest.TestCase):
         """
         found = self.offered(
             [_v("E4", "C4", "G3", "C3"), _v("G4", "D4", "B3", "G2")], "I V")
-        soprano = [o for o in found if o.voice == "soprano"]
+        soprano = [o for o in found if o.voice == "soprano" and o.kind == "passing"]
         self.assertEqual(len(soprano), 1)
         self.assertEqual(str(soprano[0].pitch), "F4")
         self.assertFalse(soprano[0].available)
@@ -101,11 +102,40 @@ class TestOpportunities(unittest.TestCase):
         specs = parse_progression("i ii°", key)
         voicings = [_v("F5", "F4", "D4", "D3"), _v("E5", "G4", "Bb3", "E3")]
         found = opportunities(voicings, specs, key, self.profile)
-        tenor = [o for o in found if o.voice == "tenor"]
+        tenor = [o for o in found if o.voice == "tenor" and o.kind == "passing"]
         self.assertEqual(len(tenor), 1)
         self.assertEqual(str(tenor[0].pitch), "C4")
         self.assertFalse(tenor[0].available)
         self.assertEqual(tenor[0].refused_by, "unequal_fourths")
+
+    def test_an_offer_a_choice_rules_out_stops_being_offered(self):
+        """What is shown has to be what will work.
+
+        Alone, the alto and the tenor can each take a passing tone here.
+        Together they open the gap between them past an octave, so once the
+        alto's is chosen the tenor's is no longer on offer - rather than
+        being offered and then refusing itself on the click.
+        """
+        specs = parse_progression("IV V", self.key)
+        voicings = [_v("B4", "D4", "E3", "G2"), _v("B4", "F4", "C3", "G2")]
+
+        alone = {o.slot for o in opportunities(voicings, specs, self.key,
+                                               self.profile) if o.available}
+        self.assertIn("0:alto:passing:E4", alone)
+        self.assertIn("0:tenor:passing:D3", alone)
+
+        after = {o.slot for o in opportunities(voicings, specs, self.key,
+                                               self.profile,
+                                               chosen=["0:alto:passing:E4"])
+                 if o.available}
+        self.assertNotIn("0:tenor:passing:D3", after)
+
+    def test_a_voice_already_carrying_a_figure_is_offered_nothing_more(self):
+        specs = parse_progression("IV V", self.key)
+        voicings = [_v("B4", "D4", "E3", "G2"), _v("B4", "F4", "C3", "G2")]
+        after = opportunities(voicings, specs, self.key, self.profile,
+                              chosen=["0:alto:passing:E4"])
+        self.assertEqual([], [o for o in after if o.voice == "alto"])
 
     def test_every_offer_is_a_step_from_both_of_its_neighbours(self):
         """Whatever is offered must be a real passing figure."""
@@ -113,7 +143,8 @@ class TestOpportunities(unittest.TestCase):
             key = Key.parse(key_text)
             specs = parse_progression(prog, key)
             voicings = solve(specs, key, self.profile)[0].voicings
-            for offer in opportunities(voicings, specs, key, self.profile):
+            for offer in opportunities(voicings, specs, key, self.profile,
+                                       kinds=("passing",)):
                 with self.subTest(key=key_text, progression=prog, offer=offer):
                     before = voicings[offer.chord][offer.voice]
                     after = voicings[offer.chord + 1][offer.voice]
@@ -127,7 +158,8 @@ class TestOpportunities(unittest.TestCase):
             key = Key.parse(key_text)
             specs = parse_progression(prog, key)
             voicings = solve(specs, key, self.profile)[0].voicings
-            total += sum(1 for o in opportunities(voicings, specs, key, self.profile)
+            total += sum(1 for o in opportunities(voicings, specs, key, self.profile,
+                                                 kinds=("passing",))
                          if o.available)
         self.assertGreater(total, 0)
 
@@ -157,33 +189,33 @@ class TestApply(unittest.TestCase):
         self.assertEqual(refused, [])
         self.assertEqual([e.voicing for e in events], self.voicings)
         self.assertEqual([e.beats for e in events], [1.0] * 2)
-        self.assertEqual([e.passing for e in events], [()] * 2)
+        self.assertEqual([e.decorating for e in events], [()] * 2)
 
     def test_a_chosen_tone_splits_its_beat_in_half(self):
-        events, refused = self.place([(0, "soprano")])
+        events, refused = self.place(["0:soprano:passing:D5"])
         self.assertEqual(refused, [])
         self.assertEqual(len(events), 3)
         self.assertEqual([e.beats for e in events[:2]], [0.5, 0.5])
         self.assertEqual(events[0].voicing, self.voicings[0])
-        self.assertEqual(events[1].passing, ("soprano",))
+        self.assertEqual(events[1].decorating, ("soprano",))
 
     def test_the_weak_half_moves_one_voice_and_holds_the_rest(self):
-        events, _ = self.place([(0, "soprano")])
+        events, _ = self.place(["0:soprano:passing:D5"])
         held, weak = events[0].voicing, events[1].voicing
         self.assertNotEqual(weak.soprano, held.soprano)
         self.assertEqual((weak.alto, weak.tenor, weak.bass),
                          (held.alto, held.tenor, held.bass))
 
     def test_the_music_keeps_its_length(self):
-        events, _ = self.place([(0, "soprano"), (0, "tenor")])
+        events, _ = self.place(["0:soprano:passing:D5", "0:tenor:passing:B3"])
         self.assertEqual(sum(e.beats for e in events), float(len(self.specs)))
 
     def test_two_compatible_tones_share_one_weak_half(self):
         """Both passing tones sound together; the beat splits once, not twice."""
-        events, refused = self.place([(0, "soprano"), (0, "tenor")])
+        events, refused = self.place(["0:soprano:passing:D5", "0:tenor:passing:B3"])
         self.assertEqual(refused, [])
         self.assertEqual(len(events), 3)
-        self.assertEqual(set(events[1].passing), {"soprano", "tenor"})
+        self.assertEqual(set(events[1].decorating), {"soprano", "tenor"})
 
 
 class TestApplyRefuses(unittest.TestCase):
@@ -195,7 +227,7 @@ class TestApplyRefuses(unittest.TestCase):
         specs = parse_progression("I V", self.key)
         voicings = [_v("E4", "C4", "G3", "C3"), _v("G4", "D4", "B3", "G2")]
         events, refused = apply(voicings, specs, self.key, self.profile,
-                                [(0, "soprano")])
+                                ["0:soprano:passing:F4"])
         self.assertEqual([e.beats for e in events], [1.0, 1.0])
         self.assertEqual(len(refused), 1)
         self.assertEqual(refused[0].refused_by, "parallel_perfect")
@@ -206,23 +238,25 @@ class TestApplyRefuses(unittest.TestCase):
         The numerals here are carriers. opportunities and apply grade
         sonority and motion, never whether a voicing spells the chord it
         is written under - that is the checker's job - so these voicings
-        are built to isolate the spacing rule and nothing else.
+        are built to isolate the spacing rule and nothing else. IV is the
+        carrier because a figure has to be foreign to the chord it
+        decorates, and neither filling belongs to F A C.
         """
-        specs = parse_progression("I V", self.key)
+        specs = parse_progression("IV V", self.key)
         voicings = [_v("B4", "D4", "E3", "G2"), _v("B4", "F4", "C3", "G2")]
 
         alone_alto, refused = apply(voicings, specs, self.key, self.profile,
-                                    [(0, "alto")])
+                                    ["0:alto:passing:E4"])
         self.assertEqual(refused, [], "the alto's tone is legal on its own")
         self.assertEqual(len(alone_alto), 3)
 
         alone_tenor, refused = apply(voicings, specs, self.key, self.profile,
-                                     [(0, "tenor")])
+                                     ["0:tenor:passing:D3"])
         self.assertEqual(refused, [], "the tenor's tone is legal on its own")
         self.assertEqual(len(alone_tenor), 3)
 
         together, refused = apply(voicings, specs, self.key, self.profile,
-                                  [(0, "alto"), (0, "tenor")])
+                                  ["0:alto:passing:E4", "0:tenor:passing:D3"])
         self.assertEqual(len(refused), 1)
         self.assertEqual(refused[0].refused_by, "spacing")
-        self.assertEqual(together[1].passing, ("alto",))
+        self.assertEqual(together[1].decorating, ("alto",))
