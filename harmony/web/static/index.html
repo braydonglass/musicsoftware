@@ -224,7 +224,7 @@
 
     <div class="field grow">
       <label for="prog">Progression</label>
-      <input id="prog" value="I IV V I" spellcheck="false"
+      <input id="prog" value="I ii6 V I" spellcheck="false"
              placeholder="I IV V I  ·  i N6 V i  ·  i iv Ger+6 V  ·  I V/V V I">
       <div class="inserts" id="inserts"></div>
     </div>
@@ -347,6 +347,33 @@
     return el("path", { "class": cls, d: d,
       transform: "translate(" + x + "," + y + ") scale(" + SPACE * (k || 1) + ")" });
   }
+
+  /* Everything that talks to the engine goes through here.
+
+     Served by the Python HTTP layer this posts to /api; built for a static
+     host it is replaced with a shim that calls the same three functions
+     inside Pyodide, so the page itself does not know or care which it is
+     talking to and there is one page rather than two that drift. */
+  var backend = window.HARMONY_BACKEND || {
+    realize: function (request) {
+      return fetch("/api/realize", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(request),
+      }).then(function (r) { return r.json(); });
+    },
+    candidates: function (request) {
+      return fetch("/api/candidates", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(request),
+      }).then(function (r) { return r.json(); });
+    },
+    profiles: function () {
+      return fetch("/api/profiles").then(function (r) { return r.json(); });
+    },
+    midiUrl: function (params) {
+      return "/api/midi?" + new URLSearchParams(params).toString();
+    },
+  };
 
   var score = document.getElementById("score");
   var current = null, currentIndex = 0;
@@ -720,7 +747,7 @@
       return;
     }
     link.setAttribute("aria-disabled", "false");
-    link.href = "/api/midi?" + new URLSearchParams({
+    var href = backend.midiUrl({
       key: document.getElementById("key").value,
       progression: document.getElementById("prog").value,
       profile: document.getElementById("profile").value,
@@ -728,7 +755,16 @@
       soprano: melodyText(),
       alt: String(currentIndex),
       figures: Object.keys(chosen).join(","),
-    }).toString();
+    });
+    /* Served by the Python layer this is a real URL and is set at once.
+       Built static there is no server to ask, so the file has to be made
+       first and the answer arrives later. */
+    if (href && typeof href.then === "function") {
+      href.then(function (url) { link.href = url; })
+          .catch(function () { link.setAttribute("aria-disabled", "true"); });
+    } else {
+      link.href = href;
+    }
   }
 
   function renderExceptions(payload) {
@@ -839,15 +875,11 @@
     var box = document.getElementById("options");
     if (!melody) { box.innerHTML = ""; choices = []; return Promise.resolve(); }
 
-    return fetch("/api/candidates", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        key: document.getElementById("key").value,
-        soprano: melody,
-        profile: document.getElementById("profile").value,
-      }),
+    return backend.candidates({
+      key: document.getElementById("key").value,
+      soprano: melody,
+      profile: document.getElementById("profile").value,
     })
-      .then(function (r) { return r.json(); })
       .then(function (payload) {
         if (!payload.ok) { box.innerHTML = ""; setStatus(payload.error, "err"); return; }
         /* Keep whatever the progression box already says when it lines up,
@@ -891,19 +923,14 @@
     button.disabled = true;
     setStatus("working…");
 
-    fetch("/api/realize", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        key: document.getElementById("key").value,
-        progression: document.getElementById("prog").value,
-        profile: document.getElementById("profile").value,
-        soprano: melodyText(),
-        alternates: 3,
-        figures: chosenList(),
-      }),
+    backend.realize({
+      key: document.getElementById("key").value,
+      progression: document.getElementById("prog").value,
+      profile: document.getElementById("profile").value,
+      soprano: melodyText(),
+      alternates: 3,
+      figures: chosenList(),
     })
-      .then(function (r) { return r.json(); })
       .then(function (payload) {
         button.disabled = false;
         if (!keepAlternate) currentIndex = 0;
@@ -976,8 +1003,7 @@
 
   function loadProfiles() {
     var select = document.getElementById("profile");
-    return fetch("/api/profiles")
-      .then(function (r) { return r.json(); })
+    return backend.profiles()
       .then(function (data) { return data.profiles || []; })
       .catch(function () { return []; })
       .then(function (names) {
@@ -1090,7 +1116,7 @@
 
   /* A stale server is otherwise invisible: the page reloads fine while the
      Python behind it is whatever was running when it started. */
-  fetch("/api/profiles").then(function (r) { return r.json(); })
+  backend.profiles()
     .then(function (d) {
       document.getElementById("build").textContent = "engine " + (d.build || "?");
     }).catch(function () {});
