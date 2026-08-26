@@ -258,6 +258,8 @@
             title="Hold this soprano. Add a chord and the tune stays; only the new chord is left for the engine.">Keep soprano</button>
     <button id="addAll" disabled
             title="Place every one of these that fits, everywhere it fits">Add all</button>
+    <button id="clearFigures" disabled
+            title="Take out every embellishment, of every kind">Clear</button>
     <button id="play" disabled>Play</button>
     <a id="export" class="export" href="#" download>Export MIDI</a>
   </div>
@@ -941,6 +943,7 @@
           document.getElementById("play").disabled = true;
           document.getElementById("keep").disabled = true;
           document.getElementById("addAll").disabled = true;
+          document.getElementById("clearFigures").disabled = true;
           updateExport();
           setStatus(payload.error, "err");
           return;
@@ -959,6 +962,8 @@
         document.getElementById("play").disabled = false;
         document.getElementById("keep").disabled = false;
         document.getElementById("addAll").disabled = false;
+        document.getElementById("clearFigures").disabled =
+          !Object.keys(chosen).length;
         if (keeping) captureSoprano(payload);
         updateExport();
         var swaps = payload.results[currentIndex].substitutions || [];
@@ -1073,6 +1078,16 @@
     /* Offers were measured one at a time against what was already chosen,
        so taking several at once can still find two that clash. The engine
        refuses those and the refusals prune them back out. */
+    realize(true);
+  });
+
+  document.getElementById("clearFigures").addEventListener("click", function () {
+    if (!Object.keys(chosen).length) return;
+    /* Every kind, not the one the menu happens to be showing. Add all is
+       scoped to the menu because it has to be - it places notes - but a
+       writer reaching for Clear wants the score back, and hunting through
+       six menu positions to empty it would be a poor joke. */
+    chosen = {};
     realize(true);
   });
 
