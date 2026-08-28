@@ -136,7 +136,7 @@
       "enabled": true,
       "severity": "error",
       "cost": "inf",
-      "waived_cost": 40.0
+      "waived_cost": "inf"
     },
     "augmented_sixth_resolution": {
       "enabled": true,
@@ -147,13 +147,13 @@
       "enabled": true,
       "severity": "error",
       "cost": "inf",
-      "waived_cost": 40.0
+      "waived_cost": "inf"
     },
     "unequal_fourths": {
       "enabled": true,
       "severity": "error",
       "cost": "inf",
-      "waived_cost": 40.0
+      "waived_cost": "inf"
     },
     "missing_essential_tone": {
       "enabled": true,
@@ -182,8 +182,8 @@
     },
     "missing_seventh": {
       "enabled": true,
-      "severity": "warning",
-      "cost": 9.0
+      "severity": "error",
+      "cost": "inf"
     }
   }
 }

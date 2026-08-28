@@ -218,10 +218,11 @@ def missing_essential_tone(ctx: StateContext) -> list[Violation]:
 
 @register(
     rule_id="missing_seventh",
-    scope="state", severity="warning", cost=9.0, category="doubling",
-    explanation=("A seventh chord wants its seventh - it is what gives the chord "
-                 "its pull. Priced rather than required, so voice leading can "
-                 "outbid it."),
+    scope="state", severity="error", cost=math.inf, category="doubling",
+    explanation=("A chord written with a seventh figure must have its seventh. "
+                 "V43 names a seventh chord in second inversion; drop the seventh "
+                 "and the figure is describing a chord that is not there. This is "
+                 "not a doubling preference - it is what the numeral said."),
 )
 def missing_seventh(ctx: StateContext) -> list[Violation]:
     if ctx.spec.seventh_pc is None:
