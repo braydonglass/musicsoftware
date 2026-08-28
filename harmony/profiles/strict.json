@@ -182,8 +182,8 @@
     },
     "missing_seventh": {
       "enabled": true,
-      "severity": "warning",
-      "cost": 9.0
+      "severity": "error",
+      "cost": "inf"
     }
   }
 }

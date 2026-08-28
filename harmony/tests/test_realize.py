@@ -12,11 +12,17 @@ import contextlib
 import unittest
 
 from harmony.cli import main
-from harmony.core.checker import check, errors_only
+from harmony.core.checker import check, errors_only, explained_breaks
 from harmony.core.key import Key
 from harmony.core.roman import parse_progression
 from harmony.core.rules.registry import PROFILE_DIR, Profile
 from harmony.core.solver import NoRealization, realize, solve
+from harmony.core.voice import Voicing
+from harmony.core.pitch import Pitch
+
+
+def voicing(s, a, t, b):
+    return Voicing(*(Pitch.parse(p) for p in (s, a, t, b)))
 
 def shipped_profiles():
     return sorted(path.stem for path in PROFILE_DIR.glob("*.json"))
@@ -103,6 +109,26 @@ class TestRealize(unittest.TestCase):
                 errors = errors_only(check(result.voicings, specs, key, profile))
                 self.assertEqual(errors, [], f"{name}: {[str(e) for e in errors]}")
 
+    def test_the_registry_and_the_profiles_agree(self):
+        """A rule that vanishes from the module must not vanish silently.
+
+        Profile.rules() walks the registry, so a profile naming a rule that
+        no longer exists is ignored without a word - the rule simply stops
+        being enforced and every test that does not target it keeps passing.
+        Editing this package by replacing a span of transition.py has now
+        deleted a rule twice, so the two lists are pinned against each other.
+        """
+        from harmony.core.rules.registry import REGISTRY
+        for name in shipped_profiles():
+            with self.subTest(profile=name):
+                configured = set(Profile.load(name).settings)
+                self.assertEqual(
+                    configured - set(REGISTRY), set(),
+                    f"{name}.json configures rules that no longer exist")
+                self.assertEqual(
+                    set(REGISTRY) - configured, set(),
+                    f"{name}.json says nothing about these registered rules")
+
     def test_reinversion_rescues_what_it_can(self):
         """iv -> V in minor survives only by re-voicing, and says so."""
         # V6 puts the leading tone in the bass, so the next bass must be the
@@ -134,6 +160,79 @@ class TestRealize(unittest.TestCase):
         self.assertTrue(any(word in message for word in
                             ("leading_tone", "hidden_perfect", "parallel")),
                         f"the failure should name what blocked it: {message}")
+
+
+class TheSeventhThatStopsBeingADissonance(unittest.TestCase):
+    """V7 -> iv, and why the seventh does not have to move.
+
+    A seventh resolves downward because it is dissonant against its own
+    root. In every minor key the seventh of V7 is the root of iv, so the
+    chord that follows makes it a consonance and there is nothing left to
+    resolve. Without this the progression is unwritable, and the engine used
+    to escape by quietly dropping the seventh out of a chord the writer had
+    figured as a seventh chord.
+    """
+
+    PROGRESSION = "V V43 iv i V7 VI VI V i"
+    MINOR_KEYS = ["c", "a", "e", "b", "f#", "c#", "g#", "d#",
+                  "d", "g", "f", "bb", "eb", "ab"]
+
+    def setUp(self):
+        self.profile = Profile.load("strict")
+
+    def test_the_seventh_of_V7_is_a_chord_tone_of_iv_in_every_minor_key(self):
+        """The fact the exception rests on, checked rather than assumed."""
+        for tonic in self.MINOR_KEYS:
+            with self.subTest(key=tonic):
+                key = Key.parse(f"{tonic} minor")
+                dominant, subdominant = parse_progression("V7 iv", key)
+                self.assertIn(dominant.seventh_pc, subdominant.pitch_classes)
+
+    def test_it_realizes_in_every_minor_key(self):
+        for tonic in self.MINOR_KEYS:
+            with self.subTest(key=tonic):
+                key = Key.parse(f"{tonic} minor")
+                specs = parse_progression(self.PROGRESSION, key)
+                result = solve(specs, key, self.profile)[0]
+                errors = errors_only(
+                    check(result.voicings, result.specs or specs, key, self.profile))
+                self.assertEqual(errors, [], [str(e) for e in errors])
+
+    def test_a_figured_seventh_chord_keeps_its_seventh(self):
+        """V43 names a seventh chord; one without a seventh is a different chord."""
+        for tonic in self.MINOR_KEYS:
+            with self.subTest(key=tonic):
+                key = Key.parse(f"{tonic} minor")
+                specs = parse_progression(self.PROGRESSION, key)
+                result = solve(specs, key, self.profile)[0]
+                spec = (result.specs or specs)[1]
+                self.assertIsNotNone(spec.seventh_pc)
+                self.assertIn(
+                    spec.seventh_pc,
+                    [p.pitch_class for p in result.voicings[1].pitches],
+                    f"{spec.numeral} was written without its seventh")
+
+    def test_holding_it_is_reported_with_the_reason(self):
+        """The student meets the rule and its exception together."""
+        key = Key.parse("c minor")
+        specs = parse_progression(self.PROGRESSION, key)
+        result = solve(specs, key, self.profile)[0]
+        graded = check(result.voicings, result.specs or specs, key, self.profile)
+        held = [v for v in explained_breaks(graded)
+                if v.rule_id == "seventh_resolution"]
+        self.assertTrue(held, "the held seventh went unexplained")
+        self.assertIn("iv", held[0].reason)
+
+    def test_a_seventh_still_has_to_resolve_when_it_stays_dissonant(self):
+        """The exception is about consonance, not a general licence to hold."""
+        key = Key.parse("C major")
+        specs = parse_progression("V7 I", key)
+        # the soprano keeps F4, the seventh, which I does not contain
+        voicings = [voicing("F4", "D4", "B3", "G2"),
+                    voicing("F4", "C4", "C4", "C3")]
+        found = check(voicings, specs, key, self.profile)
+        faults = [v for v in errors_only(found) if v.rule_id == "seventh_resolution"]
+        self.assertTrue(faults, "an unresolved seventh was let through")
 
 
 class TestCLI(unittest.TestCase):

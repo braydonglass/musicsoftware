@@ -427,12 +427,23 @@ def leading_tone_resolution(ctx: TransitionContext) -> list[Violation]:
 @register(
     rule_id="seventh_resolution",
     scope="transition", severity="error", cost=math.inf, category="resolution",
-    explanation="A chordal seventh falls by step.",
+    explanation=("A chordal seventh falls by step - unless the chord that "
+                 "follows contains it, which makes it a consonance and "
+                 "leaves nothing to resolve."),
 )
 def seventh_resolution(ctx: TransitionContext) -> list[Violation]:
+    """Falls by step - unless the next chord stops it being a dissonance.
+
+    The seventh resolves downward because it is dissonant against its own
+    root. When the chord that follows contains that same tone as a chord
+    member, the dissonance has gone: nothing is left to resolve, and the
+    voice may simply hold. That is what makes V7 -> iv writable at all, since
+    the seventh of V7 is the root of iv in every minor key.
+    """
     spec = ctx.spec_a
     if spec.seventh_pc is None:
         return []
+    consonant_next = spec.seventh_pc in ctx.spec_b.pitch_classes
     out = []
     for name in VOICE_NAMES:
         here, there = ctx.a[name], ctx.b[name]
@@ -440,6 +451,20 @@ def seventh_resolution(ctx: TransitionContext) -> list[Violation]:
             continue
         interval, direction = melodic_interval(here, there)
         if direction == -1 and interval.generic == 2 and interval.specific in (1, 2):
+            continue
+        held = there.pitch_class == spec.seventh_pc
+        if held and consonant_next:
+            out.append(Violation(
+                "seventh_resolution", [name], ctx.index,
+                f"the seventh {here} in the {name} is held rather than resolved",
+                severity="exception", waived=True,
+                reason=(f"A seventh falls by step because it is a dissonance "
+                        f"against its own root. Here {spec.seventh_pc} is a "
+                        f"member of {ctx.spec_b.numeral} as well, so the "
+                        f"dissonance is gone and there is nothing left to "
+                        f"resolve - the voice keeps the note and it becomes a "
+                        f"consonance."),
+            ))
             continue
         out.append(Violation(
             "seventh_resolution", [name], ctx.index,
