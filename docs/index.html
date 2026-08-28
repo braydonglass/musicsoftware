@@ -493,11 +493,22 @@ window.HARMONY_SOURCES = {
 
   var LEFT = 18, CLEF_W = 96, COL_W = 84;
 
-  /* How far apart the accidentals of a key signature stand. A Bravura sharp
-     is a full staff space wide and a flat is a little narrower, so they do
-     not want the same column: sharps interleave their arms slightly, which
-     is how they are engraved, and flats sit closer without touching. */
-  function sigStep(kind) { return kind === "flat" ? 18 : 21; }
+  /* Bravura draws at engraving size, where an accidental is a full staff
+     space wide and nearly three tall. This page's noteheads are smaller
+     than that - rx 7.4 is about six tenths of a space, where an engraved
+     head is a whole one - so an accidental at its intended size towers over
+     the notes it belongs to. ACC_SCALE sizes them to the heads instead.
+
+     Everything else about accidentals follows from it. The widths below are
+     measured from the font, so a signature steps by the width of the glyph
+     actually being drawn rather than a number that has to be re-guessed
+     whenever the scale moves: sharps interleave their arms slightly, which
+     is how they are engraved, and the narrower flats sit closer. */
+  var ACC_SCALE = 0.75;
+  var ACC_W = { sharp: 0.996, flat: 0.904, natural: 0.672 };   // staff spaces
+  function accWidth(kind) { return ACC_W[kind] * SPACE * ACC_SCALE; }
+  function sigStep(kind) { return accWidth(kind === "flat" ? "flat" : "sharp") * 0.9; }
+  function accKind(alt) { return alt > 0 ? "sharp" : alt < 0 ? "flat" : "natural"; }
 
   /* Where each accidental of a key signature sits, in the conventional order.
      Bass clef repeats the pattern a third lower. */
@@ -657,8 +668,8 @@ window.HARMONY_SOURCES = {
     var sigGlyph = sig.kind === "sharp" ? SHARP_D : FLAT_D;
     for (var s = 0; s < (sig.count || 0); s++) {
       var sx = LEFT + CLEF_W + 2 + s * sigW;
-      score.appendChild(glyph(sigGlyph, sx, yOf(SIG_ORDER[sig.kind].treble[s]), 1, "clef"));
-      score.appendChild(glyph(sigGlyph, sx, yOf(SIG_ORDER[sig.kind].bass[s]), 1, "clef"));
+      score.appendChild(glyph(sigGlyph, sx, yOf(SIG_ORDER[sig.kind].treble[s]), ACC_SCALE, "clef"));
+      score.appendChild(glyph(sigGlyph, sx, yOf(SIG_ORDER[sig.kind].bass[s]), ACC_SCALE, "clef"));
     }
 
     /* A decorated beat holds two sonorities, so the chord slides left to
@@ -711,7 +722,10 @@ window.HARMONY_SOURCES = {
         if (note.accidental) {
           var mark = note.alteration > 0 ? SHARP_D
                    : note.alteration < 0 ? FLAT_D : NATURAL_D;
-          group.appendChild(glyph(mark, nx - 36, y, 1, "acc"));
+          /* 10.2 is the notehead's own half-width plus the gap an engraver
+             leaves; the glyph's width is added so all three clear equally. */
+          group.appendChild(glyph(mark, nx - 10.2 - accWidth(accKind(note.alteration)),
+                                  y, ACC_SCALE, "acc"));
         }
         group.appendChild(el("ellipse", { "class": "head", cx: nx, cy: y,
           rx: 7.4, ry: 5.5, transform: "rotate(-21 " + nx + " " + y + ")" }));
