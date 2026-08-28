@@ -44,12 +44,40 @@
   }
 
   /* ---- score on top ---- */
+  .stage { position: relative; }
   .score-wrap {
     background: var(--recess); border: 1px solid var(--panel-edge);
     border-radius: 3px; overflow-x: auto; overflow-y: hidden; min-height: 330px;
     display: flex; align-items: center;
   }
   .score { display: block; }
+
+  /* Served from Python the work happens elsewhere and the page stays live.
+     Built for a static host it happens in Pyodide, on this thread, and the
+     tab is frozen solid for as long as it takes - so this has to be painted
+     before the call goes out rather than after it, which is what painted()
+     is for.
+
+     The spinner turns with a transform, which the compositor animates off
+     the main thread. It therefore keeps moving while the engine has that
+     thread locked, and is the only part of the page that can. */
+  #busy {
+    position: absolute; inset: 0; display: none; z-index: 2;
+    align-items: center; justify-content: center; gap: 10px;
+    background: rgba(16, 21, 26, .82);
+    font-family: var(--mono); font-size: 11px; letter-spacing: .12em;
+    text-transform: uppercase; color: var(--amber);
+  }
+  #busy[data-on] { display: flex; }
+  #busy .spinner {
+    width: 13px; height: 13px; border-radius: 50%;
+    border: 2px solid var(--amber-dim); border-top-color: var(--amber);
+    animation: spin .7s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) { #busy .spinner { animation: none; } }
+
+  .figure-actions { display: flex; gap: 6px; }
 
   .staff-line { stroke: var(--ink-faint); stroke-width: 1.3; opacity: .55; }
   .barline    { stroke: var(--ink-faint); stroke-width: 1.3; opacity: .55; }
@@ -201,8 +229,11 @@
 
 <div class="rig">
 
-  <div class="score-wrap">
-    <svg class="score" id="score" role="img" aria-label="Four-part realization"></svg>
+  <div class="stage">
+    <div class="score-wrap">
+      <svg class="score" id="score" role="img" aria-label="Four-part realization"></svg>
+    </div>
+    <div id="busy" role="status" aria-live="polite"><span class="spinner"></span>working</div>
   </div>
 
   <div class="legend">
@@ -236,13 +267,14 @@
     </div>
 
     <div class="field">
-      <label for="profile">Rule profile</label>
-      <select id="profile"></select>
-    </div>
-
-    <div class="field">
       <label for="figure">Embellishment</label>
       <select id="figure"></select>
+      <div class="figure-actions">
+        <button id="addAll" disabled
+                title="Place every one of these that fits, everywhere it fits">Add all</button>
+        <button id="clearFigures" disabled
+                title="Take out every embellishment, of every kind">Clear</button>
+      </div>
     </div>
 
     <div class="field">
@@ -256,10 +288,6 @@
     <button class="primary" id="go">Realize</button>
     <button id="keep" disabled
             title="Hold this soprano. Add a chord and the tune stays; only the new chord is left for the engine.">Keep soprano</button>
-    <button id="addAll" disabled
-            title="Place every one of these that fits, everywhere it fits">Add all</button>
-    <button id="clearFigures" disabled
-            title="Take out every embellishment, of every kind">Clear</button>
     <button id="play" disabled>Play</button>
     <a id="export" class="export" href="#" download>Export MIDI</a>
   </div>
@@ -376,6 +404,11 @@
       return "/api/midi?" + new URLSearchParams(params).toString();
     },
   };
+
+  /* One profile ships, so there is nothing to pick. The name still goes
+     with every request: the engine takes a profile, and letting it default
+     silently would hide which ruleset graded the answer. */
+  var PROFILE = "strict";
 
   var score = document.getElementById("score");
   var current = null, currentIndex = 0;
@@ -732,6 +765,45 @@
   var status = document.getElementById("status");
   var altsBox = document.getElementById("alts");
 
+  /* Resolves once the browser has actually put a frame on screen.
+
+     One rAF fires before a paint, so its callback still runs with the old
+     pixels showing; the second runs after that paint has landed, and the
+     timeout drops out of the animation callback so the blocking work does
+     not sit inside it. Setting a busy state and calling straight into
+     Pyodide freezes the tab with the state never drawn, which looks
+     precisely like the hang it was added to explain. */
+  function painted() {
+    return new Promise(function (resolve) {
+      var done = false;
+      function go() { if (!done) { done = true; resolve(); } }
+      /* A hidden tab gets no animation frames at all, so waiting on rAF
+         alone means a page left in another window waits for a paint that
+         never comes and stays disabled for good. The timer is the floor.
+         Nothing is lost by taking it: a tab nobody is looking at has
+         nothing to show, and the frame path still wins whenever there is
+         a frame to win with. */
+      setTimeout(go, 60);
+      requestAnimationFrame(function () {
+        requestAnimationFrame(function () { setTimeout(go, 0); });
+      });
+    });
+  }
+
+  /* A count rather than a flag. Building the MIDI re-runs the whole search,
+     and it starts while the realization that asked for it is still finishing
+     - so the two spans of work overlap, and a flag would clear the overlay
+     for a frame in between and then put it straight back. */
+  var busy = document.getElementById("busy"), busyDepth = 0;
+  function setBusy(on) {
+    busyDepth = Math.max(0, busyDepth + (on ? 1 : -1));
+    var button = document.getElementById("go");
+    if (busyDepth) busy.setAttribute("data-on", "");
+    else busy.removeAttribute("data-on");
+    button.disabled = busyDepth > 0;
+    button.textContent = busyDepth ? "Working\u2026" : "Realize";
+  }
+
   function setStatus(text, kind) {
     status.innerHTML = "";
     if (!text) return;
@@ -749,24 +821,30 @@
       return;
     }
     link.setAttribute("aria-disabled", "false");
-    var href = backend.midiUrl({
-      key: document.getElementById("key").value,
-      progression: document.getElementById("prog").value,
-      profile: document.getElementById("profile").value,
-      tempo: document.getElementById("tempo").value,
-      soprano: melodyText(),
-      alt: String(currentIndex),
-      figures: Object.keys(chosen).join(","),
-    });
     /* Served by the Python layer this is a real URL and is set at once.
-       Built static there is no server to ask, so the file has to be made
-       first and the answer arrives later. */
-    if (href && typeof href.then === "function") {
-      href.then(function (url) { link.href = url; })
-          .catch(function () { link.setAttribute("aria-disabled", "true"); });
-    } else {
-      link.href = href;
-    }
+       Built static there is no server to ask, so the file is made here -
+       and making it re-runs the whole search on this thread. That is a
+       second freeze immediately after the first, which is why it waits for
+       a frame and holds the busy state rather than doing it in silence. */
+    setBusy(true);
+    painted()
+      .then(function () {
+        var href = backend.midiUrl({
+          key: document.getElementById("key").value,
+          progression: document.getElementById("prog").value,
+          profile: PROFILE,
+          tempo: document.getElementById("tempo").value,
+          soprano: melodyText(),
+          alt: String(currentIndex),
+          figures: Object.keys(chosen).join(","),
+        });
+        return href;
+      })
+      .then(function (url) { link.href = url; setBusy(false); })
+      .catch(function () {
+        link.setAttribute("aria-disabled", "true");
+        setBusy(false);
+      });
   }
 
   function renderExceptions(payload) {
@@ -877,12 +955,17 @@
     var box = document.getElementById("options");
     if (!melody) { box.innerHTML = ""; choices = []; return Promise.resolve(); }
 
-    return backend.candidates({
-      key: document.getElementById("key").value,
-      soprano: melody,
-      profile: document.getElementById("profile").value,
-    })
+    setBusy(true);
+    return painted()
+      .then(function () {
+        return backend.candidates({
+          key: document.getElementById("key").value,
+          soprano: melody,
+          profile: PROFILE,
+        });
+      })
       .then(function (payload) {
+        setBusy(false);
         if (!payload.ok) { box.innerHTML = ""; setStatus(payload.error, "err"); return; }
         /* Keep whatever the progression box already says when it lines up,
            otherwise start each note on its first workable chord so there is
@@ -905,7 +988,7 @@
         }
         renderOptions(payload);
       })
-      .catch(function () { box.innerHTML = ""; });
+      .catch(function () { setBusy(false); box.innerHTML = ""; });
   }
 
   /* Hold the tune the engine found. Adding a chord then leaves the melody
@@ -921,20 +1004,21 @@
 
   function realize(keepAlternate) {
     stopPlayback();
-    var button = document.getElementById("go");
-    button.disabled = true;
+    setBusy(true);
     setStatus("working…");
 
-    backend.realize({
-      key: document.getElementById("key").value,
-      progression: document.getElementById("prog").value,
-      profile: document.getElementById("profile").value,
-      soprano: melodyText(),
-      alternates: 3,
-      figures: chosenList(),
-    })
+    return painted()
+      .then(function () {
+        return backend.realize({
+          key: document.getElementById("key").value,
+          progression: document.getElementById("prog").value,
+          profile: PROFILE,
+          soprano: melodyText(),
+          alternates: 3,
+          figures: chosenList(),
+        });
+      })
       .then(function (payload) {
-        button.disabled = false;
         if (!keepAlternate) currentIndex = 0;
         if (!payload.ok) {
           current = null;
@@ -946,6 +1030,7 @@
           document.getElementById("clearFigures").disabled = true;
           updateExport();
           setStatus(payload.error, "err");
+          setBusy(false);
           return;
         }
         current = payload;
@@ -979,13 +1064,13 @@
         var faults = payload.results[currentIndex].violations.length;
         setStatus(faults
           ? faults + " violation" + (faults === 1 ? "" : "s") + " remain"
-          : "no violations  ·  " + payload.numerals.length + " chords  ·  " +
-            payload.profile +
+          : "no violations  ·  " + payload.numerals.length + " chords" +
             (payload.sopranoFixed ? "  ·  melody fixed, ATB filled in" : ""),
           faults ? "err" : "ok");
+        setBusy(false);
       })
       .catch(function (e) {
-        button.disabled = false;
+        setBusy(false);
         setStatus("could not reach the engine: " + e.message, "err");
       });
   }
@@ -1005,23 +1090,6 @@
     keySelect.appendChild(option);
   });
   keySelect.value = "C major";
-
-  function loadProfiles() {
-    var select = document.getElementById("profile");
-    return backend.profiles()
-      .then(function (data) { return data.profiles || []; })
-      .catch(function () { return []; })
-      .then(function (names) {
-        if (!names.length) names = ["strict"];
-        names.forEach(function (name) {
-          var option = document.createElement("option");
-          option.value = name;
-          option.textContent = name.replace(/_/g, " ");
-          select.appendChild(option);
-        });
-        select.value = names.indexOf("strict") >= 0 ? "strict" : names[0];
-      });
-  }
 
   /* insert buttons for the characters a keyboard hides */
   [["°", "diminished, as in vii°"], ["ø", "half diminished, as in viiø7"],
@@ -1122,11 +1190,9 @@
   sopranoBox.addEventListener("keydown", function (e) {
     if (e.key === "Enter") refreshMelody();
   });
-  [keySelect, document.getElementById("profile")].forEach(function (node) {
-    node.addEventListener("change", function () {
-      /* a new key changes which chords can carry the melody */
-      if (melodyText()) refreshMelody(); else if (current) realize();
-    });
+  keySelect.addEventListener("change", function () {
+    /* a new key changes which chords can carry the melody */
+    if (melodyText()) refreshMelody(); else if (current) realize();
   });
 
   /* A stale server is otherwise invisible: the page reloads fine while the
@@ -1138,8 +1204,6 @@
 
   draw(null, 0);
   updateExport();
-  // The first realization waits for the profile list, or it would post an
-  // empty profile name.
-  loadProfiles().then(realize);
+  realize();
 })();
 </script>
