@@ -693,11 +693,36 @@ window.HARMONY_SOURCES = {
         });
       });
 
-      /* noteheads, nudged apart when two voices share or neighbour a position */
+      /* Two voices on the same note share one notehead.
+
+         It is one sound. Two heads stacked in a column say the writer put
+         two notes there, which is not what a unison is. So the head is
+         drawn once, in the colour of the upper of the two voices - they are
+         indistinguishable at that moment, so it shows the higher - and each
+         voice still draws its own stem. The stems are what say two parts
+         are in there, one going up and one down out of a single head, and
+         they keep their own colours so it stays clear which two.
+
+         Two things that look like this are not it. A second still has to be
+         nudged aside, because heads a step apart cannot share a column. So
+         does C4 under C#4: same line, same look, different notes - which is
+         why the merge matches on the written name and not the position.
+
+         A decorated note never merges. Its head is the click target that
+         takes the figure away again, and folding it into another voice's
+         head would take that away with it. */
+      var owner = {}, placed = {};
+      which.forEach(function (name) {
+        if ((passing || []).indexOf(name) >= 0) return;
+        var key = voices[name].name;
+        if (!(key in owner)) owner[key] = name;      // which runs soprano first
+      });
+
       var seen = {};
       which.forEach(function (name) {
         var note = voices[name], d = dia(note), y = yOf(d);
         var decorating = (passing || []).indexOf(name) >= 0;
+        var shared = !decorating && owner[note.name] !== name;
         var group = el("g", { "class": "v-" + name + (decorating ? " figure spot" : "") });
         if (decorating) {
           /* Find the slot this note came from, so clicking it takes it out
@@ -713,13 +738,21 @@ window.HARMONY_SOURCES = {
           group.appendChild(off);
         }
         score.appendChild(group);
-        var shift = 0;
-        for (var other in seen) if (Math.abs(seen[other] - d) <= 1) shift = 15;
+
+        /* A voice that merged asks nothing of the column: it takes the x the
+           head was already drawn at, whatever nudging that head needed. */
+        var nx;
+        if (shared) {
+          nx = placed[note.name];
+        } else {
+          var shift = 0;
+          for (var other in seen) if (Math.abs(seen[other] - d) <= 1) shift = 15;
+          nx = x + (STEM_UP[name] ? shift : -shift);
+          if (!decorating) placed[note.name] = nx;
+        }
         seen[name] = d;
 
-        var nx = x + (STEM_UP[name] ? shift : -shift);
-
-        if (note.accidental) {
+        if (!shared && note.accidental) {
           var mark = note.alteration > 0 ? SHARP_D
                    : note.alteration < 0 ? FLAT_D : NATURAL_D;
           /* 10.2 is the notehead's own half-width plus the gap an engraver
@@ -727,8 +760,10 @@ window.HARMONY_SOURCES = {
           group.appendChild(glyph(mark, nx - 10.2 - accWidth(accKind(note.alteration)),
                                   y, ACC_SCALE, "acc"));
         }
-        group.appendChild(el("ellipse", { "class": "head", cx: nx, cy: y,
-          rx: 7.4, ry: 5.5, transform: "rotate(-21 " + nx + " " + y + ")" }));
+        if (!shared) {
+          group.appendChild(el("ellipse", { "class": "head", cx: nx, cy: y,
+            rx: 7.4, ry: 5.5, transform: "rotate(-21 " + nx + " " + y + ")" }));
+        }
         group.appendChild(STEM_UP[name]
           ? line(nx + 6.8, y - 1.6, nx + 6.8, y - STEM, "stem")
           : line(nx - 6.8, y + 1.6, nx - 6.8, y + STEM, "stem"));
