@@ -36,12 +36,72 @@
     display: flex; justify-content: center; padding: 20px;
   }
 
+  .shell {
+    display: flex; gap: 14px; align-items: flex-start;
+    width: 100%; max-width: 1244px;
+  }
   .rig {
     background: var(--panel-deep);
     background-image: linear-gradient(180deg, rgba(255,255,255,.028), rgba(0,0,0,.18));
     border: 1px solid var(--panel-edge); border-radius: 6px;
-    padding: 18px; width: 100%; max-width: 980px;
+    padding: 18px; flex: 1 1 auto; min-width: 0; max-width: 980px;
     display: flex; flex-direction: column; gap: 14px;
+  }
+
+  /* ---- feelings ----
+
+     The order is the content. It runs from the lightest affect at the top to
+     the heaviest at the bottom, and the colour runs with it, so the shape of
+     the list says what the list is before a word of it is read. */
+  .feelings {
+    flex: 0 0 236px; width: 236px;
+    background: var(--panel-deep);
+    background-image: linear-gradient(180deg, rgba(255,255,255,.028), rgba(0,0,0,.18));
+    border: 1px solid var(--panel-edge); border-radius: 6px;
+    padding: 14px; display: flex; flex-direction: column; gap: 2px;
+  }
+  .feelings h2 {
+    font-size: 10px; letter-spacing: .14em; text-transform: uppercase;
+    color: var(--ink-faint); margin: 0 0 8px; font-weight: 400;
+  }
+  .feel {
+    display: flex; align-items: center; gap: 8px; width: 100%;
+    font-family: var(--mono); font-size: 12px; text-align: left;
+    padding: 7px 8px; border-radius: 3px; cursor: pointer;
+    border: 1px solid transparent; background: none; color: var(--ink);
+  }
+  .feel:hover { background: var(--recess); }
+  .feel[aria-expanded="true"] { background: var(--recess); border-color: var(--panel-edge); }
+  .feel i { width: 8px; height: 8px; border-radius: 50%; flex: 0 0 8px; background: var(--tone); }
+  .feel .n { font-size: 10px; color: var(--ink-faint); margin-left: auto; }
+  .feel-progs { display: none; padding: 2px 0 8px 22px; flex-direction: column; gap: 3px; }
+  .feel-progs[data-open] { display: flex; }
+  .feel-note { font-size: 10px; color: var(--ink-faint); line-height: 1.5; padding-bottom: 5px; }
+  /* Not uppercase. In a Roman numeral the case IS the quality - i is minor
+     and I is major - so upcasing this text does not restyle it, it says
+     something false. Same for the key beneath it: "a minor" upcased reads
+     as A major. */
+  .prog-pick {
+    font-family: var(--mono); font-size: 11px; text-align: left;
+    text-transform: none; letter-spacing: .02em;
+    padding: 5px 7px; border-radius: 3px; cursor: pointer;
+    border: 1px solid var(--panel-edge); background: var(--recess);
+    color: var(--ink-faint);
+  }
+  .prog-pick:hover { color: var(--ink); border-color: var(--tone); }
+  .prog-pick .key { color: var(--tone); font-size: 10px; display: block; margin-top: 2px; }
+
+  /* Asked before anything is thrown away, never after. */
+  .feel-confirm {
+    border: 1px solid var(--amber-dim); background: #1C1811; border-radius: 3px;
+    padding: 9px; margin-bottom: 8px; font-size: 11px; line-height: 1.5; color: var(--ink);
+  }
+  .feel-confirm .row { display: flex; gap: 6px; margin-top: 8px; }
+  .feel-confirm button { font-size: 10px; padding: 6px 9px; }
+
+  @media (max-width: 940px) {
+    .shell { flex-direction: column; }
+    .feelings { flex: none; width: 100%; }
   }
 
   /* ---- score on top ---- */
@@ -228,6 +288,20 @@
   .hint code { color: var(--cyan); }
 </style>
 
+<div class="shell">
+
+<aside class="feelings">
+  <h2>Feelings</h2>
+  <div class="feel-confirm" id="feelConfirm" hidden>
+    <span id="feelConfirmText">Replace what you are working on?</span>
+    <div class="row">
+      <button id="feelYes" class="primary">Replace</button>
+      <button id="feelNo">Keep mine</button>
+    </div>
+  </div>
+  <div id="feelList"></div>
+</aside>
+
 <div class="rig">
 
   <div class="stage">
@@ -309,6 +383,8 @@
     chord that can carry each note appears below, and clicking one rebuilds the
     progression. Rules the engine breaks on purpose are listed with the reason.
   </div>
+</div>
+
 </div>
 
 
@@ -421,6 +497,11 @@ window.HARMONY_SOURCES = {
   var lastBlob = null;
 
   window.HARMONY_BACKEND = {
+    /* Building a file here means running the whole search again, on this
+       thread. The page asks so it can defer that to the moment somebody
+       actually wants the file, rather than doing it on every nudge of the
+       tempo slider. Served from Python the same call is a string. */
+    deferred: true,
     realize: function (request) { return call("_realize", request); },
     candidates: function (request) { return call("_candidates", request); },
     profiles: function () {
@@ -580,6 +661,86 @@ window.HARMONY_SOURCES = {
      with every request: the engine takes a profile, and letting it default
      silently would hide which ruleset graded the answer. */
   var PROFILE = "strict";
+
+
+  /* ---------- feelings ----------
+
+     The words come from the Geneva Emotional Music Scale (Zentner, Grandjean
+     and Scherer, 2008), which is the instrument built for this exact
+     question: not what a piece is *about*, but what a listener reports
+     actually feeling while it plays. Its nine factors were derived from
+     listeners rather than borrowed from general emotion research, which is
+     why they include Transcendence and Nostalgia - states music reliably
+     produces and a list of everyday emotions has no room for. The scale
+     stops before guilt, so the bottom of this list reaches past it.
+
+     Ordered lightest to heaviest, and every progression here was run
+     through the engine before it was written down: each one realizes, ends
+     with no violations, and contains no parallel or direct octave, fifth or
+     fourth. The two that did not survive that - both of them a diminished
+     seventh moving somewhere it cannot go - are simply not here. */
+  var FEELINGS = [
+    { name: "Transcendence", tone: "#F0DFAE",
+      note: "Chords a third apart, borrowed from the flat side. No leading tone pulls, so it lifts rather than resolves.",
+      progs: [ ["C major", "I ♭VI ♭VII I"], ["C major", "I ♭III ♭VI ♭VII I"],
+               ["C major", "I ♭VI ♭III ♭VII I"], ["C major", "I IV ♭VI ♭VII I"],
+               ["C major", "I ♭VI ♭VII I ♭III ♭VI ♭VII I"],
+               ["C major", "I IV ♭VI ♭III ♭VII IV I"] ] },
+    { name: "Wonder", tone: "#F2C879",
+      note: "A bass that walks down a scale under held-back harmony. Pachelbel and everything descended from it.",
+      progs: [ ["C major", "I V vi iii IV I IV V"], ["C major", "I V/vi vi iii IV I ii V I"],
+               ["C major", "I V vi IV I"], ["C major", "I iii vi IV I"],
+               ["C major", "I vi iii IV I"], ["C major", "I iii vi iii IV I ii V I"] ] },
+    { name: "Peacefulness", tone: "#A6D6BE",
+      note: "Plagal motion - IV falling to I, the amen. It settles without ever having been unsettled.",
+      progs: [ ["C major", "I IV I V I"], ["C major", "IV I IV I"],
+               ["C major", "I vi IV I"], ["C major", "I IV vi I"],
+               ["C major", "I iii IV I"], ["C major", "I IV I vi IV I ii V I"] ] },
+    { name: "Tenderness", tone: "#E8A7B6",
+      note: "The submediant softening every arrival. Doo-wop lives here, and so does most of what gets called warm.",
+      progs: [ ["C major", "I vi ii V I"], ["C major", "vi IV I V I"],
+               ["C major", "IV I V vi IV"], ["C major", "I iii vi IV I ii V I"],
+               ["C major", "I vi IV V I"] ] },
+    { name: "Joy", tone: "#F2A65A",
+      note: "Root-position primary chords and a dominant that means it. Nothing withheld.",
+      progs: [ ["G major", "I IV V7 I"], ["C major", "I V vi IV I"],
+               ["C major", "I IV I6 V I"], ["C major", "I V/V V I"],
+               ["C major", "I IV V I"] ] },
+    { name: "Triumph", tone: "#DE8A5E",
+      note: "The flat seventh climbing back to the tonic. Modal rather than tonal, which is why it reads as strength and not as sweetness.",
+      progs: [ ["C major", "I ♭VII ♭VI ♭VII I"], ["C major", "IV ♭VI ♭VII I"],
+               ["a minor", "i VI VII i"], ["a minor", "i iv VI VII i"],
+               ["C major", "I V6 vi IV I V vi ♭VII I"],
+               ["C major", "vi IV I V vi IV ♭VI ♭VII I"] ] },
+    { name: "Longing", tone: "#B79BD6",
+      note: "Turnarounds and the Andalusian descent - motion that keeps arriving somewhere it has already been.",
+      progs: [ ["C major", "I vi ii V I"], ["C major", "vi IV I V"],
+               ["a minor", "i VI III VII i"], ["a minor", "i iv VII III i"],
+               ["C major", "I iii vi ii V I"] ] },
+    { name: "Unease", tone: "#8E86C4",
+      note: "Diminished sevenths and augmented triads: chords where every note is a tendency tone and nothing is settled.",
+      progs: [ ["a minor", "i iv vii°7 i"], ["C major", "I vii°7 I IV"],
+               ["C major", "I V+ vi IV"], ["C major", "I III+ vi IV"],
+               ["a minor", "i vii°7/V V i"], ["C major", "I IV vii°7 I"] ] },
+    { name: "Sorrow", tone: "#6E82AC",
+      note: "Minor with the seventh left flat, and basses that fall. The lament, which is the oldest of these.",
+      progs: [ ["a minor", "i iv i V i"], ["d minor", "i VII VI VII i"],
+               ["c minor", "i iv V7 i"], ["c minor", "i VII VI iv V7 i"],
+               ["d minor", "i iv VII III VI ii° V i"],
+               ["c minor", "V V43 iv i V7 VI VI V i"] ] },
+    { name: "Remorse", tone: "#8A6076",
+      note: "The Neapolitan and the augmented sixth - the heaviest chromatic gravity tonal harmony has, both of them leaning hard on a cadence that cannot refuse.",
+      progs: [ ["a minor", "i N6 V7 i"], ["c minor", "i iv It+6 V"],
+               ["c minor", "i iv Ger+6 V"], ["c minor", "i iv Fr+6 V"],
+               ["a minor", "i VI Fr+6 V i"], ["d minor", "i iv VI N6 V7 i"],
+               ["c minor", "i VI iv N6 V7 i"] ] },
+  ];
+
+  /* Whether there is work here worth asking about before replacing it. The
+     progression the page opens with is not work; what the writer typed,
+     pinned or decorated is. */
+  var dirty = false;
+  function markDirty() { dirty = true; }
 
   var score = document.getElementById("score");
   var current = null, currentIndex = 0;
@@ -836,6 +997,7 @@ window.HARMONY_SOURCES = {
      again. A refused offer answers with the rule rather than doing nothing,
      because why it cannot go there is the part worth knowing. */
   score.addEventListener("click", function (event) {
+    markDirty();
     var spot = event.target.closest && event.target.closest(".spot");
     if (!spot || !spot.dataset.slot) return;
     var slot = spot.dataset.slot;
@@ -1021,12 +1183,33 @@ window.HARMONY_SOURCES = {
     status.appendChild(span);
   }
 
+  /* Building the file is free on one backend and costs a whole search on
+     the other, so the backend says which it is rather than the page
+     guessing. Where it is free the href stays a real URL that can be copied
+     or opened; where it is not, it is built when somebody asks. */
+  var EXPORT_DEFERRED = !!backend.deferred;
+  var exportStale = true;
+
+  function staleExport() {
+    exportStale = true;
+    var link = document.getElementById("export");
+    link.setAttribute("aria-disabled", (current && current.ok) ? "false" : "true");
+    /* No href until it is built: a stale one would hand over a file at the
+       wrong tempo, which is worse than making the click wait. */
+    link.removeAttribute("href");
+  }
+
   function updateExport() {
+    if (EXPORT_DEFERRED) { staleExport(); return; }
+    buildExport();
+  }
+
+  function buildExport() {
     var link = document.getElementById("export");
     if (!current || !current.ok) {
       link.setAttribute("aria-disabled", "true");
       link.removeAttribute("href");
-      return;
+      return Promise.resolve(null);
     }
     link.setAttribute("aria-disabled", "false");
     /* Served by the Python layer this is a real URL and is set at once.
@@ -1035,9 +1218,9 @@ window.HARMONY_SOURCES = {
        second freeze immediately after the first, which is why it waits for
        a frame and holds the busy state rather than doing it in silence. */
     setBusy(true);
-    painted()
+    return painted()
       .then(function () {
-        var href = backend.midiUrl({
+        return backend.midiUrl({
           key: document.getElementById("key").value,
           progression: document.getElementById("prog").value,
           profile: PROFILE,
@@ -1046,12 +1229,14 @@ window.HARMONY_SOURCES = {
           alt: String(currentIndex),
           figures: Object.keys(chosen).join(","),
         });
-        return href;
       })
-      .then(function (url) { link.href = url; setBusy(false); })
+      .then(function (url) {
+        link.href = url; exportStale = false; setBusy(false); return url;
+      })
       .catch(function () {
         link.setAttribute("aria-disabled", "true");
         setBusy(false);
+        return null;
       });
   }
 
@@ -1092,6 +1277,7 @@ window.HARMONY_SOURCES = {
         draw(current, currentIndex);
         renderAlternates(current);
         renderExceptions(current);
+        syncProgression(current, currentIndex);
         updateExport();
       });
       altsBox.appendChild(chip);
@@ -1181,9 +1367,16 @@ window.HARMONY_SOURCES = {
         var typed = document.getElementById("prog").value.trim().split(/\s+/).filter(Boolean);
         choices = payload.notes.map(function (entry, i) {
           var options = entry.options.map(function (o) { return o.numeral; });
-          if (typed.length === payload.notes.length && options.indexOf(typed[i]) >= 0) {
-            return typed[i];
-          }
+          /* What is written wins wherever it can still carry the note, and
+             that is decided one position at a time.
+
+             This used to require the two lists to be the same length before
+             it would honour any of them, so adding or removing a single
+             melody note reset every chord underneath to whatever came first
+             in its list - throwing away the writer's choices about notes
+             they had not touched. Position by position, a chord that still
+             works is a chord that stays. */
+          if (typed[i] && options.indexOf(typed[i]) >= 0) return typed[i];
           /* a hole offers nothing, so whatever is already written stands */
           if (entry.free) return typed[i] || "";
           return options[0] || "";
@@ -1197,6 +1390,26 @@ window.HARMONY_SOURCES = {
         renderOptions(payload);
       })
       .catch(function () { setBusy(false); box.innerHTML = ""; });
+  }
+
+  /* What the engine actually voiced, written back into the box.
+
+     A re-voicing is a change of chord, not a private detail of the search:
+     asking for V and being given V6 means the piece has the third in the
+     bass, and a progression box still saying V is describing something the
+     page is not showing. Writing it back also makes the next realization
+     start from what is on screen rather than from what was asked for, so
+     the two cannot drift apart.
+
+     The value is set directly rather than dispatched, because an input
+     event here would read as the writer editing and would throw away the
+     decorations that were just drawn. */
+  function syncProgression(payload, index) {
+    var used = (payload.results[index] || {}).numerals;
+    if (!used || !used.length) return;
+    var box = document.getElementById("prog");
+    var text = used.join(" ");
+    if (box.value.trim() !== text) box.value = text;
   }
 
   /* Hold the tune the engine found. Adding a chord then leaves the melody
@@ -1258,6 +1471,7 @@ window.HARMONY_SOURCES = {
         document.getElementById("clearFigures").disabled =
           !Object.keys(chosen).length;
         if (keeping) captureSoprano(payload);
+        syncProgression(payload, currentIndex);
         updateExport();
         var swaps = payload.results[currentIndex].substitutions || [];
         if (swaps.length) {
@@ -1320,7 +1534,17 @@ window.HARMONY_SOURCES = {
   var tempo = document.getElementById("tempo");
   tempo.addEventListener("input", function () {
     document.getElementById("tempoVal").textContent = tempo.value + " bpm";
-    updateExport();          // the exported file carries the tempo
+    /* Deliberately not rebuilding the file here.
+
+       Playback reads the tempo when Play is pressed, so it is already
+       current - the audio is synthesized at that moment and nothing needs
+       preparing in advance. The only thing tempo touches is the exported
+       MIDI, and building that used to re-run the entire search on every
+       step of the slider. On a page whose engine runs in the browser that
+       is the whole search, on the main thread, forty times across one
+       drag, to change a tempo byte. So the file is marked stale and rebuilt
+       when somebody actually asks for it. */
+    staleExport();
   });
 
   var figureBox = document.getElementById("figure");
@@ -1339,6 +1563,7 @@ window.HARMONY_SOURCES = {
   });
 
   document.getElementById("addAll").addEventListener("click", function () {
+    markDirty();
     if (!current || !current.ok) return;
     var kind = currentKind();
     var before = Object.keys(chosen).length;
@@ -1358,6 +1583,7 @@ window.HARMONY_SOURCES = {
   });
 
   document.getElementById("clearFigures").addEventListener("click", function () {
+    markDirty();
     if (!Object.keys(chosen).length) return;
     /* Every kind, not the one the menu happens to be showing. Add all is
        scoped to the menu because it has to be - it places notes - but a
@@ -1377,9 +1603,125 @@ window.HARMONY_SOURCES = {
       return;
     }
     if (current && current.ok) captureSoprano(current);
+    /* Holding the soprano is the moment the melody becomes something to
+       harmonize, so the chords that can carry each note are what the writer
+       wants to see next. Capturing the tune without offering them left the
+       box empty until the melody was touched again for no reason. */
+    loadOptions();
     setStatus("soprano held - add a chord and only the new one is left to the engine",
               "ok");
   });
+
+  /* The export link builds on demand when the backend charges a search for
+     it. The first click makes the file and then clicks itself again, by
+     which point the href is real and the browser handles it as it would any
+     other download. */
+  var exportLink = document.getElementById("export");
+  exportLink.addEventListener("click", function (e) {
+    if (!exportStale) return;
+    e.preventDefault();
+    buildExport().then(function (url) { if (url) exportLink.click(); });
+  });
+
+  /* ---------- the feelings menu ---------- */
+  (function () {
+    var list = document.getElementById("feelList");
+    var confirmBox = document.getElementById("feelConfirm");
+    var confirmText = document.getElementById("feelConfirmText");
+    var pending = null;
+
+    function closeAll() {
+      [].forEach.call(list.querySelectorAll(".feel-progs[data-open]"),
+        function (b) { b.removeAttribute("data-open"); });
+      [].forEach.call(list.querySelectorAll('.feel[aria-expanded="true"]'),
+        function (h) { h.setAttribute("aria-expanded", "false"); });
+    }
+
+    function load(pair) {
+      confirmBox.hidden = true;
+      pending = null;
+      document.getElementById("key").value = pair[0];
+      document.getElementById("prog").value = pair[1];
+      document.getElementById("soprano").value = "";
+      document.getElementById("options").innerHTML = "";
+      choices = [];
+      chosen = {};
+      keeping = false;
+      var keep = document.getElementById("keep");
+      keep.classList.remove("on");
+      keep.textContent = "Keep soprano";
+      /* Loading a progression is not the writer's own work, so the next
+         thing they do is what makes this dirty again - not this. */
+      dirty = false;
+      realize();
+    }
+
+    function choose(pair) {
+      if (!dirty) return load(pair);
+      pending = pair;
+      confirmText.textContent = "Replace what you are working on with " +
+        pair[1] + " in " + pair[0] + "?";
+      confirmBox.hidden = false;
+    }
+
+    document.getElementById("feelYes").addEventListener("click", function () {
+      if (pending) load(pending);
+    });
+    document.getElementById("feelNo").addEventListener("click", function () {
+      confirmBox.hidden = true;
+      pending = null;
+    });
+
+    FEELINGS.forEach(function (feeling) {
+      var head = document.createElement("button");
+      head.type = "button";
+      head.className = "feel";
+      head.style.setProperty("--tone", feeling.tone);
+      head.setAttribute("aria-expanded", "false");
+      head.appendChild(document.createElement("i"));
+      var label = document.createElement("span");
+      label.textContent = feeling.name;
+      head.appendChild(label);
+      var count = document.createElement("span");
+      count.className = "n";
+      count.textContent = feeling.progs.length;
+      head.appendChild(count);
+
+      var body = document.createElement("div");
+      body.className = "feel-progs";
+      body.style.setProperty("--tone", feeling.tone);
+      var note = document.createElement("div");
+      note.className = "feel-note";
+      note.textContent = feeling.note;
+      body.appendChild(note);
+
+      feeling.progs.forEach(function (pair) {
+        var pick = document.createElement("button");
+        pick.type = "button";
+        pick.className = "prog-pick";
+        pick.style.setProperty("--tone", feeling.tone);
+        pick.appendChild(document.createTextNode(pair[1]));
+        var where = document.createElement("span");
+        where.className = "key";
+        where.textContent = pair[0];
+        pick.appendChild(where);
+        pick.addEventListener("click", function () { choose(pair); });
+        body.appendChild(pick);
+      });
+
+      head.addEventListener("click", function () {
+        var open = body.hasAttribute("data-open");
+        closeAll();
+        if (!open) {
+          body.setAttribute("data-open", "");
+          head.setAttribute("aria-expanded", "true");
+        }
+      });
+
+      list.appendChild(head);
+      list.appendChild(body);
+    });
+  })();
 
   document.getElementById("go").addEventListener("click", function () { realize(); });
   document.getElementById("play").addEventListener("click", play);
@@ -1390,11 +1732,12 @@ window.HARMONY_SOURCES = {
      old one; the notes stay, the decorations do not. */
   document.getElementById("prog").addEventListener("input", function () {
     chosen = {};
+    markDirty();
   });
 
   var sopranoBox = document.getElementById("soprano");
   function refreshMelody() { loadOptions().then(function () { realize(); }); }
-  sopranoBox.addEventListener("change", refreshMelody);
+  sopranoBox.addEventListener("change", function () { markDirty(); refreshMelody(); });
   sopranoBox.addEventListener("keydown", function (e) {
     if (e.key === "Enter") refreshMelody();
   });

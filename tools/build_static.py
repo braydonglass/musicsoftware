@@ -128,6 +128,11 @@ window.HARMONY_SOURCES = %(sources)s;
   var lastBlob = null;
 
   window.HARMONY_BACKEND = {
+    /* Building a file here means running the whole search again, on this
+       thread. The page asks so it can defer that to the moment somebody
+       actually wants the file, rather than doing it on every nudge of the
+       tempo slider. Served from Python the same call is a string. */
+    deferred: true,
     realize: function (request) { return call("_realize", request); },
     candidates: function (request) { return call("_candidates", request); },
     profiles: function () {
