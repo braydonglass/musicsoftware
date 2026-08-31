@@ -109,7 +109,6 @@
   .feel .n { font-size: 10px; color: var(--ink-faint); margin-left: auto; }
   .feel-progs { display: none; padding: 2px 0 8px 22px; flex-direction: column; gap: 3px; }
   .feel-progs[data-open] { display: flex; }
-  .feel-note { font-size: 10px; color: var(--ink-faint); line-height: 1.5; padding-bottom: 5px; }
   /* Not uppercase. In a Roman numeral the case IS the quality - i is minor
      and I is major - so upcasing this text does not restyle it, it says
      something false. Same for the key beneath it: "a minor" upcased reads
@@ -122,26 +121,45 @@
     color: var(--ink-faint);
   }
   .prog-pick:hover { color: var(--ink); border-color: var(--tone); }
+  .prog-pick { cursor: grab; }
+  .prog-pick:active { cursor: grabbing; }
+  /* Dropped onto the progression, a feeling is added to the end of what is
+     there rather than replacing it - so two feelings can be put one after
+     the other. */
+  #prog.drop-target {
+    border-color: var(--amber); background: #1C1811; color: var(--amber);
+  }
   .prog-pick .key { color: var(--tone); font-size: 10px; display: block; margin-top: 2px; }
 
-  .ask {
-    margin-top: 8px; max-width: 190px;
-    border: 1px solid var(--amber-dim); background: #1C1811; border-radius: 3px;
-    padding: 9px; font-size: 11px; line-height: 1.5; color: var(--ink);
+  /* Asked before anything is thrown away, never after - and over the whole
+     page, because a question tucked beside the control that raised it is a
+     question that gets missed. */
+  .modal {
+    position: fixed; inset: 0; z-index: 40; display: flex;
+    align-items: center; justify-content: center; padding: 20px;
+    background: rgba(8, 11, 14, .74);
   }
-  .ask .row { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
-  .ask button { font-size: 10px; padding: 6px 9px; }
-
-  /* Asked before anything is thrown away, never after. */
-  .feel-confirm {
-    border: 1px solid var(--amber-dim); background: #1C1811; border-radius: 3px;
-    padding: 9px; margin-bottom: 8px; font-size: 11px; line-height: 1.5; color: var(--ink);
+  .modal[hidden] { display: none; }
+  .modal-card {
+    background: var(--panel-deep);
+    background-image: linear-gradient(180deg, rgba(255,255,255,.03), rgba(0,0,0,.2));
+    border: 1px solid var(--panel-edge); border-radius: 6px;
+    padding: 20px; max-width: 420px; width: 100%;
+    box-shadow: 0 18px 48px rgba(0,0,0,.55);
   }
-  .feel-confirm .row { display: flex; gap: 6px; margin-top: 8px; }
-  .feel-confirm button { font-size: 10px; padding: 6px 9px; }
+  .modal-card h2 {
+    font-size: 13px; font-weight: 400; color: var(--amber); margin: 0 0 10px;
+  }
+  .modal-card p { font-size: 12px; line-height: 1.65; color: var(--ink); margin: 0 0 14px; }
+  .modal-again {
+    display: flex; align-items: center; gap: 7px; margin-bottom: 14px;
+    font-size: 11px; color: var(--ink-faint); cursor: pointer;
+  }
+  .modal-again input { accent-color: var(--amber); margin: 0; }
+  .modal-row { display: flex; gap: 8px; flex-wrap: wrap; }
+  .modal-row button { font-size: 10px; padding: 9px 13px; }
 
   /* ---- melodies ---- */
-  .melody-box { width: 100%; font-size: 12px; padding: 8px 9px; }
   .tune {
     display: block; width: 100%; text-align: left; font-family: var(--mono);
     font-size: 12px; text-transform: none; letter-spacing: .02em;
@@ -355,6 +373,10 @@
   .transport .chips { margin-left: auto; }
   .prog-actions { display: flex; gap: 6px; margin-top: 7px; }
   .field label.stacked { margin-top: 12px; }
+  /* Which key the held tune is in. The notes alone do not say: E-flat F G
+     is a minor melody and F G A a major one, and once the soprano is
+     pinned that is the fact that decides what can go under it. */
+  .held-key { margin-left: 8px; color: var(--amber); letter-spacing: .1em; }
 
   .hint { font-size: 11px; color: var(--ink-faint); line-height: 1.7; }
   .hint h3 {
@@ -370,17 +392,23 @@
   .hint code { color: var(--cyan); }
 </style>
 
+<div class="modal" id="modal" hidden>
+  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+    <h2 id="modalTitle"></h2>
+    <p id="modalBody"></p>
+    <label class="modal-again">
+      <input type="checkbox" id="modalAgain"> Do not ask again
+    </label>
+    <div class="modal-row">
+      <button class="primary" id="modalYes"></button>
+      <button id="modalNo"></button>
+    </div>
+  </div>
+</div>
+
 <div class="shell">
 
 <aside class="side">
-  <div class="feel-confirm" id="feelConfirm" hidden>
-    <span id="feelConfirmText">Replace what you are working on?</span>
-    <div class="row">
-      <button id="feelYes" class="primary">Replace</button>
-      <button id="feelNo">Keep mine</button>
-    </div>
-  </div>
-
   <section class="panel" id="feelPanel">
     <header>
       <h2>Feelings</h2>
@@ -411,7 +439,8 @@
 
   <div class="transport">
     <button id="play" disabled>Play</button>
-    <button id="reset" title="Empty the staff and start again">Reset</button>
+    <button id="reset"
+            title="Empty the staff, start again, and ask the questions you turned off">Reset</button>
     <a id="export" class="export" href="#" download>Export MIDI</a>
     <div class="chips" id="alts"></div>
   </div>
@@ -422,13 +451,6 @@
     <div class="field">
       <label for="key">Key</label>
       <select id="key"></select>
-      <div class="ask" id="keyAsk" hidden>
-        <span id="keyAskText"></span>
-        <div class="row">
-          <button id="keyYes" class="primary">Transcribe</button>
-          <button id="keyNo">Keep the notes</button>
-        </div>
-      </div>
     </div>
 
     <div class="field grow">
@@ -440,7 +462,8 @@
         <button class="primary" id="go">Realize</button>
       </div>
 
-      <label for="soprano" class="stacked">Melody (soprano) &mdash; optional</label>
+      <label for="soprano" class="stacked">Soprano &mdash; optional<span
+        class="held-key" id="heldKey"></span></label>
       <input id="soprano" spellcheck="false"
              placeholder="E5 F5 D5 C5  &middot;  leave empty to let the engine choose">
       <div class="prog-actions">
@@ -559,7 +582,7 @@
      actually being drawn rather than a number that has to be re-guessed
      whenever the scale moves: sharps interleave their arms slightly, which
      is how they are engraved, and the narrower flats sit closer. */
-  var ACC_SCALE = 0.75;
+  var ACC_SCALE = 0.5;
   var ACC_W = { sharp: 0.996, flat: 0.904, natural: 0.672 };   // staff spaces
   function accWidth(kind) { return ACC_W[kind] * SPACE * ACC_SCALE; }
   function sigStep(kind) { return accWidth(kind === "flat" ? "flat" : "sharp") * 0.9; }
@@ -585,7 +608,6 @@
     appoggiatura: "appoggiatura",
   };
   var STEM_UP = { soprano: true, alto: false, tenor: true, bass: false };
-  var LETTERS = "CDEFGAB";
 
   function dia(n) { return n.letter + 7 * n.octave; }
   function yOf(d) { return (TOP_REF - d) * STEP; }
@@ -661,55 +683,45 @@
      seventh moving somewhere it cannot go - are simply not here. */
   var FEELINGS = [
     { name: "Transcendence", tone: "#F0DFAE",
-      note: "Chords a third apart, borrowed from the flat side. No leading tone pulls, so it lifts rather than resolves.",
       progs: [ ["C major", "I ♭VI ♭VII I"], ["C major", "I ♭III ♭VI ♭VII I"],
                ["C major", "I ♭VI ♭III ♭VII I"], ["C major", "I IV ♭VI ♭VII I"],
                ["C major", "I ♭VI ♭VII I ♭III ♭VI ♭VII I"],
                ["C major", "I IV ♭VI ♭III ♭VII IV I"] ] },
     { name: "Wonder", tone: "#F2C879",
-      note: "A bass that walks down a scale under held-back harmony. Pachelbel and everything descended from it.",
       progs: [ ["C major", "I V vi iii IV I IV V"], ["C major", "I V/vi vi iii IV I ii V I"],
                ["C major", "I V vi IV I"], ["C major", "I iii vi IV I"],
                ["C major", "I vi iii IV I"], ["C major", "I iii vi iii IV I ii V I"] ] },
     { name: "Peacefulness", tone: "#A6D6BE",
-      note: "Plagal motion - IV falling to I, the amen. It settles without ever having been unsettled.",
       progs: [ ["C major", "I IV I V I"], ["C major", "IV I IV I"],
                ["C major", "I vi IV I"], ["C major", "I IV vi I"],
                ["C major", "I iii IV I"], ["C major", "I IV I vi IV I ii V I"] ] },
     { name: "Tenderness", tone: "#E8A7B6",
-      note: "The submediant softening every arrival. Doo-wop lives here, and so does most of what gets called warm.",
       progs: [ ["C major", "I vi ii V I"], ["C major", "vi IV I V I"],
                ["C major", "IV I V vi IV"], ["C major", "I iii vi IV I ii V I"],
                ["C major", "I vi IV V I"] ] },
     { name: "Joy", tone: "#F2A65A",
-      note: "Root-position primary chords and a dominant that means it. Nothing withheld.",
       progs: [ ["G major", "I IV V7 I"], ["C major", "I V vi IV I"],
                ["C major", "I IV I6 V I"], ["C major", "I V/V V I"],
                ["C major", "I IV V I"] ] },
     { name: "Triumph", tone: "#DE8A5E",
-      note: "The flat seventh climbing back to the tonic. Modal rather than tonal, which is why it reads as strength and not as sweetness.",
       progs: [ ["C major", "I ♭VII ♭VI ♭VII I"], ["C major", "IV ♭VI ♭VII I"],
                ["a minor", "i VI VII i"], ["a minor", "i iv VI VII i"],
                ["C major", "I V6 vi IV I V vi ♭VII I"],
                ["C major", "vi IV I V vi IV ♭VI ♭VII I"] ] },
     { name: "Longing", tone: "#B79BD6",
-      note: "Turnarounds and the Andalusian descent - motion that keeps arriving somewhere it has already been.",
       progs: [ ["C major", "I vi ii V I"], ["C major", "vi IV I V"],
                ["a minor", "i VI III VII i"], ["a minor", "i iv VII III i"],
                ["C major", "I iii vi ii V I"] ] },
     { name: "Unease", tone: "#8E86C4",
-      note: "Diminished sevenths and augmented triads: chords where every note is a tendency tone and nothing is settled.",
       progs: [ ["a minor", "i iv vii°7 i"], ["C major", "I vii°7 I IV"],
                ["C major", "I V+ vi IV"], ["C major", "I III+ vi IV"],
                ["a minor", "i vii°7/V V i"], ["C major", "I IV vii°7 I"] ] },
     { name: "Sorrow", tone: "#6E82AC",
-      note: "Minor with the seventh left flat, and basses that fall. The lament, which is the oldest of these.",
       progs: [ ["a minor", "i iv i V i"], ["d minor", "i VII VI VII i"],
                ["c minor", "i iv V7 i"], ["c minor", "i VII VI iv V7 i"],
                ["d minor", "i iv VII III VI ii° V i"],
                ["c minor", "V V43 iv i V7 VI VI V i"] ] },
     { name: "Remorse", tone: "#8A6076",
-      note: "The Neapolitan and the augmented sixth - the heaviest chromatic gravity tonal harmony has, both of them leaning hard on a cadence that cannot refuse.",
       progs: [ ["a minor", "i N6 V7 i"], ["c minor", "i iv It+6 V"],
                ["c minor", "i iv Ger+6 V"], ["c minor", "i iv Fr+6 V"],
                ["a minor", "i VI Fr+6 V i"], ["d minor", "i iv VI N6 V7 i"],
@@ -725,13 +737,18 @@
 
   /* ---------- popular melodies ----------
 
-     Four, because four is what survived being listened to. An earlier list
-     of thirteen was longer and worse: some of those tunes were my own
-     approximations of a phrase rather than the phrase, and an approximate
-     folk melody is not recognisable, it is just wrong. These are opening
-     phrases whose rhythm really is a run of quarter notes, so what the
-     engine writes - one chord per beat - is the tune and not a flattening
-     of it. That is exactly why Ode to Joy worked first time.
+     Opening phrases that really are a run of quarter notes, so what the
+     engine writes - one chord per beat - is the tune rather than a
+     flattening of it. That is exactly why Ode to Joy worked first time and
+     an earlier list of thirteen mostly did not: several of those were my
+     own approximation of a phrase rather than the phrase, and an
+     approximate folk melody is not recognisable, it is just wrong.
+
+     Everything here is a tune whose notes can be written down without
+     hedging, checked against the solver with the harmony it would get. A
+     melody that will not realize is not on the list: Hot Cross Buns,
+     Kumbaya, Michael Row the Boat and Go Tell Aunt Rhody all fail at a
+     V to I their pinned soprano leaves no way through.
 
      None of these harmonizations was written by hand. candidates_for knows
      every chord that can carry a given note in the soprano - it checks the
@@ -766,7 +783,102 @@
       key: "C major",
       soprano: "G4 A4 G4 F4 E4 F4 G4",
       slots: [] },
+    { title: "Frere Jacques", source: "traditional",
+      key: "C major",
+      soprano: "C4 D4 E4 C4 C4 D4 E4 C4",
+      slots: [] },
+    { title: "Old MacDonald", source: "traditional",
+      key: "C major",
+      soprano: "C5 C5 C5 G4 A4 A4 G4",
+      slots: [] },
+    { title: "This Old Man", source: "traditional",
+      key: "C major",
+      soprano: "G4 E4 G4 G4 E4 G4",
+      slots: [] },
+    { title: "Au Clair de la Lune", source: "French traditional",
+      key: "C major",
+      soprano: "C4 C4 C4 D4 E4 D4 C4 E4",
+      slots: [] },
+    { title: "Lightly Row", source: "traditional",
+      key: "C major",
+      soprano: "G4 E4 E4 F4 D4 D4 C4 D4 E4 F4 G4",
+      slots: [] },
+    { title: "Long, Long Ago", source: "Bayly",
+      key: "C major",
+      soprano: "G4 C5 C5 C5 B4 C5 D5 C5",
+      slots: [] },
   ];
+
+  /* ---------- asking ----------
+
+     One dialog, over the page, for the two questions worth interrupting
+     for: replacing work that has not been saved anywhere, and changing a
+     melody's mode. Both destroy something if answered wrongly and neither
+     can be undone, which is the bar for stopping somebody.
+
+     "Do not ask again" stores the answer, not just the silence - the
+     question still has to be answered the next time it comes up, and the
+     answer already given is the one that gets used. It is per browser and
+     survives a reload; where storage is refused, blocked or simply absent,
+     nothing is remembered and the question is asked, which is the safe way
+     round. Reset turns the questions back on. */
+  var REMEMBERED = { replace: "harmony.ask.replace",
+                     transcribe: "harmony.ask.transcribe" };
+
+  function recall(which) {
+    try { return localStorage.getItem(REMEMBERED[which]); } catch (e) { return null; }
+  }
+  function retain(which, answer) {
+    try { localStorage.setItem(REMEMBERED[which], answer); } catch (e) {}
+  }
+  function askAgainAboutEverything() {
+    Object.keys(REMEMBERED).forEach(function (which) {
+      try { localStorage.removeItem(REMEMBERED[which]); } catch (e) {}
+    });
+  }
+
+  var modal = document.getElementById("modal");
+  var modalAgain = document.getElementById("modalAgain");
+  var answering = null;
+
+  function closeModal() {
+    modal.hidden = true;
+    answering = null;
+  }
+
+  function answer(said) {
+    var asked = answering;
+    if (!asked) return;
+    if (modalAgain.checked) retain(asked.remember, said);
+    closeModal();
+    (said === "yes" ? asked.yes : asked.no)();
+  }
+
+  /* question: {remember, title, body, yesLabel, noLabel, yes, no} */
+  function ask(question) {
+    var already = recall(question.remember);
+    if (already === "yes") return question.yes();
+    if (already === "no") return question.no();
+    answering = question;
+    document.getElementById("modalTitle").textContent = question.title;
+    document.getElementById("modalBody").textContent = question.body;
+    document.getElementById("modalYes").textContent = question.yesLabel;
+    document.getElementById("modalNo").textContent = question.noLabel;
+    modalAgain.checked = false;
+    modal.hidden = false;
+    document.getElementById("modalYes").focus();
+  }
+
+  document.getElementById("modalYes").addEventListener("click", function () { answer("yes"); });
+  document.getElementById("modalNo").addEventListener("click", function () { answer("no"); });
+  /* Escape and the backdrop mean no, and never remember it: a question
+     dismissed is not a question answered. */
+  modal.addEventListener("click", function (e) {
+    if (e.target === modal) { modalAgain.checked = false; answer("no"); }
+  });
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape" && !modal.hidden) { modalAgain.checked = false; answer("no"); }
+  });
 
   var score = document.getElementById("score");
   var current = null, currentIndex = 0;
@@ -1515,10 +1627,15 @@
                     " - change the note, or the key", "err");
           return false;
         }
-        /* Never shrink the progression to fit the melody. A melody shorter
-           than the progression is the whole point of holding one: the extra
-           chord is exactly what the engine has been left to answer. */
-        if (!typed.length || choices.length === typed.length) {
+        /* Never shrink the progression to fit the melody: a melody shorter
+           than the progression is the whole point of holding one, and the
+           extra chord is exactly what the engine has been left to answer.
+           A melody that has grown past it is the opposite case and wants
+           the opposite thing. Adding a note used to leave the progression
+           where it was and report eight notes against seven chords, which
+           is a complaint about a state the page had just put itself in.
+           There is a chord for the new note in the list already. */
+        if (!typed.length || choices.length >= typed.length) {
           document.getElementById("prog").value = choices.join(" ");
         }
       })
@@ -1731,16 +1848,29 @@
     realize(true);
   });
 
+  /* Which mode the held tune is in. Shown only while it is held, because
+     that is when it is a fact about the melody rather than about whatever
+     the key box happens to say at the moment. The tonic is already in the
+     key box a few inches away; the mode is the part the notes do not tell
+     you at a glance. */
+  function showHeldKey() {
+    var key = document.getElementById("key").value;
+    document.getElementById("heldKey").textContent =
+      keeping ? (key.indexOf("minor") >= 0 ? "minor" : "major") : "";
+  }
+
   var keepButton = document.getElementById("keep");
   keepButton.addEventListener("click", function () {
     keeping = !keeping;
     keepButton.classList.toggle("on", keeping);
     keepButton.textContent = keeping ? "Soprano held" : "Keep soprano";
     if (!keeping) {
+      showHeldKey();
       setStatus("soprano released - the engine may choose a new tune", "ok");
       return;
     }
     if (current && current.ok) captureSoprano(current);
+    showHeldKey();
     /* Holding the soprano is the moment the melody becomes something to
        harmonize, so the chords that can carry each note are what the writer
        wants to see next. Capturing the tune without offering them left the
@@ -1769,12 +1899,16 @@
     var keep = document.getElementById("keep");
     keep.classList.remove("on");
     keep.textContent = "Keep soprano";
+    showHeldKey();
     ["play", "keep", "addAll", "clearFigures"].forEach(function (id) {
       document.getElementById(id).disabled = true;
     });
     draw(null, 0);
     renderAlternates(null);
     updateExport();
+    /* A "do not ask again" you cannot take back is a trap, and Reset is
+       where somebody goes to start over. */
+    askAgainAboutEverything();
     setStatus("write a progression, or pick a feeling or a melody", "ok");
   });
 
@@ -1792,9 +1926,6 @@
   /* ---------- the side panels ---------- */
   (function () {
     var list = document.getElementById("feelList");
-    var confirmBox = document.getElementById("feelConfirm");
-    var confirmText = document.getElementById("feelConfirmText");
-    var pending = null;
 
     [].forEach.call(document.querySelectorAll(".panel-x"), function (x) {
       x.addEventListener("click", function () {
@@ -1823,8 +1954,6 @@
        progression with the tune would be handing over an answer that was
        never the tune's to give. */
     function load(item) {
-      confirmBox.hidden = true;
-      pending = null;
       document.getElementById("key").value = item.key;
       lastKey = item.key;
       document.getElementById("soprano").value = item.soprano || "";
@@ -1836,6 +1965,7 @@
       var keep = document.getElementById("keep");
       keep.classList.remove("on");
       keep.textContent = "Keep soprano";
+    showHeldKey();
       /* Loading something is not the writer's own work, so the next thing
          they do is what makes this dirty again - not this. */
       dirty = false;
@@ -1844,19 +1974,18 @@
 
     function choose(item) {
       if (!dirty) return load(item);
-      pending = item;
-      confirmText.textContent = "Replace what you are working on with " +
-        (item.title || item.prog) + " in " + item.key + "?";
-      confirmBox.hidden = false;
+      ask({
+        remember: "replace",
+        title: "Replace what you are working on?",
+        body: (item.title || item.prog) + " in " + item.key + " will take the " +
+              "place of the progression and melody on the page. Nothing here " +
+              "is saved anywhere, so this cannot be undone.",
+        yesLabel: "Replace",
+        noLabel: "Keep mine",
+        yes: function () { load(item); },
+        no: function () {},
+      });
     }
-
-    document.getElementById("feelYes").addEventListener("click", function () {
-      if (pending) load(pending);
-    });
-    document.getElementById("feelNo").addEventListener("click", function () {
-      confirmBox.hidden = true;
-      pending = null;
-    });
 
     FEELINGS.forEach(function (feeling) {
       var head = document.createElement("button");
@@ -1876,11 +2005,6 @@
       var body = document.createElement("div");
       body.className = "feel-progs";
       body.style.setProperty("--tone", feeling.tone);
-      var note = document.createElement("div");
-      note.className = "feel-note";
-      note.textContent = feeling.note;
-      body.appendChild(note);
-
       feeling.progs.forEach(function (pair) {
         var pick = document.createElement("button");
         pick.type = "button";
@@ -1893,6 +2017,12 @@
         pick.appendChild(where);
         pick.addEventListener("click", function () {
           choose({ key: pair[0], prog: pair[1] });
+        });
+        pick.draggable = true;
+        pick.addEventListener("dragstart", function (e) {
+          e.dataTransfer.setData("text/plain", JSON.stringify(
+            { prog: pair[1], key: pair[0], feeling: feeling.name }));
+          e.dataTransfer.effectAllowed = "copy";
         });
         body.appendChild(pick);
       });
@@ -1972,6 +2102,7 @@
       masterLevel = +master.value / 100;
     });
 
+
     document.getElementById("mixReset").addEventListener("click", function () {
       VOICES.forEach(function (name) {
         mix[name].volume = MIX_DEFAULT.volume;
@@ -1993,7 +2124,60 @@
     });
   })();
 
-  document.getElementById("go").addEventListener("click", function () { realize(); });
+  /* Drag a feeling onto the progression to add it to the end.
+
+     Clicking one replaces what is there, which is right when starting from
+     a feeling and wrong when building a piece out of several. Dropping
+     appends, so peace can be followed by unease and then by remorse.
+
+     A progression in the other mode is refused rather than appended. Its
+     numerals do not exist in this key - i is not a chord in C major - and
+     pasting them in would produce a parse error naming a numeral the writer
+     never typed. */
+  (function () {
+    var box = document.getElementById("prog");
+
+    function isMinorKey(name) { return name.indexOf("minor") >= 0; }
+
+    box.addEventListener("dragover", function (e) {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "copy";
+      box.classList.add("drop-target");
+    });
+    box.addEventListener("dragleave", function () {
+      box.classList.remove("drop-target");
+    });
+    box.addEventListener("drop", function (e) {
+      e.preventDefault();
+      box.classList.remove("drop-target");
+      var dropped;
+      try { dropped = JSON.parse(e.dataTransfer.getData("text/plain")); }
+      catch (err) { return; }
+      if (!dropped || !dropped.prog) return;
+
+      var here = document.getElementById("key").value;
+      if (isMinorKey(dropped.key) !== isMinorKey(here)) {
+        setStatus(dropped.feeling + " is written in " + dropped.key +
+                  " and the page is in " + here +
+                  " - those numerals do not exist in this key", "err");
+        return;
+      }
+      box.value = (box.value.trim() + " " + dropped.prog).trim();
+      markDirty();
+      /* The decorations were chosen against the shorter piece. */
+      chosen = {};
+      realize();
+    });
+  })();
+
+  /* Realize means realize what is on the page, and the melody is on the
+     page. Going through the melody path when there is one refreshes the
+     chords that can carry each note and extends the progression if the tune
+     has grown, which is what pressing Enter in the melody box already did -
+     the button should not be the poorer way of asking. */
+  document.getElementById("go").addEventListener("click", function () {
+    if (melodyText()) refreshMelody(); else realize();
+  });
   document.getElementById("play").addEventListener("click", play);
   document.getElementById("prog").addEventListener("keydown", function (e) {
     if (e.key === "Enter") realize();
@@ -2022,7 +2206,6 @@
      Any figures already chosen go. A slot names the pitch it decorates, and
      after a transposition those pitches are not there any more. */
   var lastKey = keySelect.value;
-  var keyAsk = document.getElementById("keyAsk");
 
   function isMinor(name) { return name.indexOf("minor") >= 0; }
 
@@ -2030,6 +2213,7 @@
      what lowers the third going into a minor key. */
   function moveMelody(from, to) {
     chosen = {};
+    showHeldKey();          // the held tune is in the new key now
     setBusy(true);
     return backend.transpose({ from: from, to: to, soprano: melodyText(),
                                profile: PROFILE })
@@ -2056,28 +2240,20 @@
   keySelect.addEventListener("change", function () {
     var from = lastKey, to = keySelect.value;
     lastKey = to;
-    keyAsk.hidden = true;
     if (!melodyText()) { if (current) realize(); return; }
-    if (isMinor(to) && !isMinor(from)) {
-      document.getElementById("keyAskText").textContent =
-        "Transcribe the melody into " + to + "? Keeping the degrees lowers " +
-        "the third and changes the tune.";
-      keyAsk.dataset.from = from;
-      keyAsk.dataset.to = to;
-      keyAsk.hidden = false;
-      return;
-    }
-    moveMelody(from, to);
-  });
-
-  document.getElementById("keyYes").addEventListener("click", function () {
-    keyAsk.hidden = true;
-    moveMelody(keyAsk.dataset.from, keyAsk.dataset.to);
-  });
-  document.getElementById("keyNo").addEventListener("click", function () {
-    keyAsk.hidden = true;
-    chosen = {};
-    refreshMelody();
+    if (isMinor(to) === isMinor(from)) { moveMelody(from, to); return; }
+    ask({
+      remember: "transcribe",
+      title: "Transcribe the melody?",
+      body: "You are going into " + to + ". Keeping the same scale degrees " +
+            (isMinor(to) ? "lowers" : "raises") + " the third, which changes " +
+            "the tune - it is the same melody in the new mode rather than the " +
+            "same notes. Doing nothing leaves the notes exactly as they are.",
+      yesLabel: "Yes, transcribe",
+      noLabel: "No, do nothing",
+      yes: function () { moveMelody(from, to); },
+      no: function () { chosen = {}; showHeldKey(); refreshMelody(); },
+    });
   });
 
   /* A stale server is otherwise invisible: the page reloads fine while the

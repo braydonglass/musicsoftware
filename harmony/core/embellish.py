@@ -92,16 +92,6 @@ WEAK_HALF = ("passing", "neighbour", "anticipation", "escape")
 STRONG_HALF = ("suspension", "appoggiatura")
 KINDS = WEAK_HALF + STRONG_HALF
 
-LABELS = {
-    "passing": "passing tone",
-    "neighbour": "neighbour tone",
-    "anticipation": "anticipation",
-    "escape": "escape tone",
-    "suspension": "suspension",
-    "appoggiatura": "appoggiatura",
-}
-
-
 def step_from(pitch: Pitch, key: Key, direction: int) -> Pitch:
     """The next letter up or down, spelled by the key signature.
 

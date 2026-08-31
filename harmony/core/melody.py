@@ -11,10 +11,12 @@ it may double a tendency tone.
 
 from __future__ import annotations
 
+import math
+
 from .key import Key
 from .pitch import Pitch
 from .roman import ChordSpec, RomanNumeralError, parse
-from .rules.registry import Profile
+from .rules.registry import Profile, TransitionContext, evaluate_transition
 from .voicing import generate
 
 # A teaching vocabulary: the chords a first harmonization exercise draws on.
@@ -76,6 +78,13 @@ def _function_of(spec: ChordSpec) -> str:
 # Where each chord likes to go next, and how much it likes it. Not a rule -
 # nothing here refuses anything - just the ordinary pull of functional
 # harmony, used to choose between chords that can all carry the same note.
+#
+# The dominant family is spelled the same in both modes and belongs to
+# both, so it points at both tonics. Listing only the major one was a real
+# mistake and not a cosmetic one: in a minor key V65 -> i then scored zero,
+# nothing preferred it to V65 -> iv, and the search cheerfully chose a
+# retrogression the solver could not connect. A key never mixes the two, so
+# naming both targets costs nothing.
 GOES_TO = {
     "I":     {"IV": 3, "V": 3, "vi": 3, "ii": 3, "iii": 2, "I6": 1, "V6": 2, "vii°6": 1},
     "I6":    {"IV": 3, "ii": 3, "V": 3, "vi": 2, "I": 1},
@@ -84,15 +93,15 @@ GOES_TO = {
     "iii":   {"vi": 3, "IV": 3, "ii": 2, "I6": 1},
     "IV":    {"V": 4, "I": 3, "ii": 2, "V7": 3, "I6": 2, "vii°6": 1},
     "IV6":   {"V": 3, "I": 2},
-    "V":     {"I": 4, "vi": 2, "I6": 1},
-    "V6":    {"I": 4},
-    "V7":    {"I": 4, "vi": 1},
-    "V65":   {"I": 4},
-    "V43":   {"I6": 3, "I": 2},
+    "V":     {"I": 4, "i": 4, "vi": 2, "VI": 2, "I6": 1, "i6": 1},
+    "V6":    {"I": 4, "i": 4},
+    "V7":    {"I": 4, "i": 4, "vi": 1, "VI": 1},
+    "V65":   {"I": 4, "i": 4},
+    "V43":   {"I6": 3, "i6": 3, "I": 2, "i": 2},
     "vi":    {"ii": 3, "IV": 3, "V": 2, "iii": 1},
     "vi6":   {"ii": 2, "V": 2},
-    "vii°6": {"I": 4, "I6": 3},
-    "N6":    {"V": 4, "V7": 3},
+    "vii°6": {"I": 4, "i": 4, "I6": 3, "i6": 3},
+    "N6":    {"V": 4, "V7": 3, "V65": 3},
     "i":     {"iv": 3, "V": 3, "VI": 3, "ii°6": 3, "III": 2, "i6": 1, "V6": 2,
               "vii°6": 1, "vii°7": 2},
     "i6":    {"iv": 3, "ii°6": 3, "V": 3, "VI": 2, "i": 1},
@@ -101,11 +110,85 @@ GOES_TO = {
     "iv":    {"V": 4, "i": 3, "V7": 3, "i6": 2, "N6": 3, "vii°7": 2},
     "iv6":   {"V": 3, "i": 2},
     "VI":    {"ii°6": 3, "iv": 3, "V": 2, "III": 1, "N6": 2},
-    "vii°7": {"i": 4, "i6": 3},
+    "vii°7": {"i": 4, "i6": 3, "I": 4, "I6": 3},
 }
 TONIC = {"major": ("I", "I6"), "minor": ("i", "i6")}
 DOMINANT = ("V", "V6", "V7", "V65", "vii°6", "vii°7")
 BEAM = 40
+
+
+def workable(options: list[list[str]], melody: list[Pitch | None],
+             key: Key, profile: Profile) -> list[list[str]]:
+    """Prune each note's chords to the ones that can actually be used.
+
+    candidates_for answers whether a chord can carry a note. It cannot
+    answer whether that chord can be reached from the one before it or left
+    for the one after, because that is not a fact about either chord alone -
+    so the list it returns contains chords that produce an error the moment
+    they are clicked.
+
+    A progression is a chain, and on a chain pairwise consistency is not an
+    approximation. Prune any chord with no partner in a neighbour, repeat
+    until nothing changes, and what survives is exactly the set of chords
+    that appear in at least one progression the transition rules allow: an
+    arc-consistent tree has a solution, and every value left in a domain
+    belongs to one of them.
+
+    Only the transition rules are consulted, and only between neighbours.
+    Whether the whole thing then realizes is still the solver's to say -
+    it weighs costs, three-chord context and re-voicing, none of which are
+    pairwise. This removes what certainly cannot work, not everything that
+    might not.
+    """
+    rules = profile.rules("transition")
+    specs: list[dict[str, ChordSpec]] = []
+    voicings: list[dict[str, list]] = []
+    for index, note in enumerate(melody):
+        here_specs, here_voicings = {}, {}
+        for token in options[index]:
+            try:
+                spec = parse(token, key)
+            except (RomanNumeralError, ValueError):
+                continue
+            found = generate(spec, key, profile, soprano=note)
+            if not found:
+                continue
+            here_specs[token] = spec
+            here_voicings[token] = [v for v, _ in found]
+        specs.append(here_specs)
+        voicings.append(here_voicings)
+
+    domains = [list(d.keys()) for d in specs]
+
+    def joins(index: int, left: str, right: str) -> bool:
+        """Is there any pair of voicings the rules will let through?"""
+        for a in voicings[index][left]:
+            for b in voicings[index + 1][right]:
+                ctx = TransitionContext(a=a, b=b, spec_a=specs[index][left],
+                                        spec_b=specs[index + 1][right],
+                                        key=key, index=index, profile=profile)
+                _, cost = evaluate_transition(ctx, rules)
+                if not math.isinf(cost):
+                    return True
+        return False
+
+    changed = True
+    while changed:
+        changed = False
+        for index in range(len(domains) - 1):
+            kept = [c for c in domains[index]
+                    if any(joins(index, c, n) for n in domains[index + 1])]
+            if len(kept) != len(domains[index]):
+                domains[index] = kept
+                changed = True
+            kept = [n for n in domains[index + 1]
+                    if any(joins(index, c, n) for c in domains[index])]
+            if len(kept) != len(domains[index + 1]):
+                domains[index + 1] = kept
+                changed = True
+    # A note pruned to nothing is worse than a note offering something that
+    # will not work: it leaves no button at all. Keep what was there.
+    return [kept or options[i] for i, kept in enumerate(domains)]
 
 
 def suggest(options: list[list[str]], key: Key) -> list[str]:

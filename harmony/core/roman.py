@@ -14,7 +14,7 @@ Still absent: modal mixture beyond what an explicit quality mark asks for.
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from .key import Key
 from .pitch import LETTER_SEMITONES, PitchClass

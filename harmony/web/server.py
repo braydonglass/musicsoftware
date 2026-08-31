@@ -22,7 +22,7 @@ from ..core.embellish import apply as place_figures
 from ..core.embellish import opportunities
 from ..core.key import Key
 from ..core.melody import (HOLE, candidates_for, parse_soprano, suggest,
-                           transpose, vocabulary_for)
+                           transpose, vocabulary_for, workable)
 from ..core.midi import to_bytes as midi_bytes
 from ..core.roman import RomanNumeralError, parse_progression
 from ..core.roman import parse as parse_roman
@@ -79,12 +79,22 @@ def candidates_payload(request: dict) -> dict:
         except (RomanNumeralError, ValueError):
             continue
         vocabulary.append(token)
+    found = [candidates_for(note, key, profile, vocabulary) if note is not None else []
+             for note in melody]
+
+    # Then drop the ones that cannot be joined to their neighbours. Carrying
+    # the note is only half of what a chord has to do, and a button that
+    # errors when pressed is worse than no button - see workable().
+    usable = workable([[o["numeral"] for o in options] for options in found],
+                      melody, key, profile)
+    found = [[o for o in options if o["numeral"] in keep]
+             for options, keep in zip(found, usable)]
+
     notes = [
         {"note": str(note) if note is not None else HOLE,
          "free": note is None,
-         "options": (candidates_for(note, key, profile, vocabulary)
-                     if note is not None else [])}
-        for note in melody
+         "options": options}
+        for note, options in zip(melody, found)
     ]
     # One chord per note, chosen across the phrase rather than one note at a
     # time - see suggest(). The page uses it wherever nothing is written.

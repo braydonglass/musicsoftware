@@ -18,7 +18,7 @@ from .rules.registry import (
     evaluate_state,
     evaluate_transition,
 )
-from .voice import VOICE_NAMES, Voicing
+from .voice import Voicing
 
 
 def check(
