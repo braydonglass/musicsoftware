@@ -89,3 +89,38 @@ class TestMidiExport(unittest.TestCase):
         plain, _ = midi_for(dict(self.BASE))
         stale, _ = midi_for(dict(self.BASE, figures="0:soprano:passing:Z9"))
         self.assertEqual(plain, stale)
+
+
+class WhatIsWrittenIsOffered(unittest.TestCase):
+    """The teaching vocabulary must not eat a chord the writer typed.
+
+    candidates_for draws on a short list of chords a first harmonization
+    exercise uses. That is right for an empty progression and wrong for one
+    that already exists: I V+ vi IV in C major offered no V+ under any note,
+    so holding the soprano rebuilt the chords from what was on offer and the
+    augmented triad silently became I. Under its D-sharp there was nothing
+    on offer at all.
+    """
+
+    def options_for(self, note, progression=""):
+        payload = candidates_payload({
+            "key": "C major", "soprano": note, "progression": progression})
+        return [o["numeral"] for o in payload["notes"][0]["options"]]
+
+    def test_a_chord_outside_the_vocabulary_is_offered_once_it_is_written(self):
+        self.assertNotIn("V+", self.options_for("B4"))
+        self.assertIn("V+", self.options_for("B4", "I V+ vi IV"))
+
+    def test_a_note_only_that_chord_can_carry_is_not_left_with_nothing(self):
+        self.assertEqual(self.options_for("D#5"), [])
+        self.assertEqual(self.options_for("D#5", "I V+ vi IV"), ["V+"])
+
+    def test_a_numeral_the_key_cannot_spell_is_ignored_not_fatal(self):
+        """Half-typed and nonsense numerals reach here constantly."""
+        for junk in ("I Xq7 V", "I V+", "", "   ", "I vii"):
+            with self.subTest(progression=junk):
+                self.assertIn("I", self.options_for("G4", junk))
+
+    def test_the_vocabulary_is_not_duplicated_by_what_is_written(self):
+        offered = self.options_for("G4", "I I6 V V")
+        self.assertEqual(len(offered), len(set(offered)))

@@ -208,11 +208,7 @@
   .v-bass    .head, .v-bass .acc    { fill: var(--v-bass); }
   .v-bass    .stem                  { stroke: var(--v-bass); }
 
-  .legend { display: flex; gap: 14px; font-size: 11px; flex-wrap: wrap; }
-  .legend span { display: flex; align-items: center; gap: 5px; }
-  .legend i {
-    width: 9px; height: 9px; border-radius: 50%; display: inline-block;
-  }
+  .legend { display: flex; font-size: 11px; }
   .build { margin-left: auto; color: var(--ink-faint); font-size: 10px; }
   /* The chord as a player names it, under the numeral that says what it
      does. Dimmer, because the numeral is the thing being taught. */
@@ -403,13 +399,7 @@
     <div id="busy" role="status" aria-live="polite"><span class="spinner"></span>working</div>
   </div>
 
-  <div class="legend">
-    <span><i style="background:var(--v-soprano)"></i>soprano</span>
-    <span><i style="background:var(--v-alto)"></i>alto</span>
-    <span><i style="background:var(--v-tenor)"></i>tenor</span>
-    <span><i style="background:var(--v-bass)"></i>bass</span>
-    <span class="build" id="build"></span>
-  </div>
+  <div class="legend"><span class="build" id="build"></span></div>
 
   <div class="transport">
     <button id="play" disabled>Play</button>
@@ -1458,6 +1448,9 @@
           key: document.getElementById("key").value,
           soprano: melody,
           profile: PROFILE,
+          /* so a chord already written is among the ones offered, even when
+             it is outside the teaching vocabulary */
+          progression: document.getElementById("prog").value,
         });
       })
       .then(function (payload) {

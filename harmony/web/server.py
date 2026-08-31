@@ -21,9 +21,11 @@ from ..core.checker import check, errors_only, explained_breaks
 from ..core.embellish import apply as place_figures
 from ..core.embellish import opportunities
 from ..core.key import Key
-from ..core.melody import HOLE, candidates_for, parse_soprano, transpose
+from ..core.melody import (HOLE, candidates_for, parse_soprano, transpose,
+                           vocabulary_for)
 from ..core.midi import to_bytes as midi_bytes
 from ..core.roman import RomanNumeralError, parse_progression
+from ..core.roman import parse as parse_roman
 from ..core.rules.registry import PROFILE_DIR, Profile
 from ..core.solver import NoRealization, realize, solve
 from ..core.voice import VOICE_NAMES
@@ -57,16 +59,33 @@ def candidates_payload(request: dict) -> dict:
     A hole - a note the writer left for the engine - has no options to
     offer and is passed straight through, so a partly pinned melody does
     not break the chord chips underneath it.
+
+    Whatever is already written is offered too. The teaching vocabulary is
+    a starting list for an empty progression, not a fence around one that
+    exists: a writer who typed V+ and then held the soprano was shown no V+
+    to hold on to, and the chord silently became I. Under a D-sharp there
+    was nothing on offer at all.
     """
     key = Key.parse(request.get("key", "C major"))
     profile = Profile.load(request.get("profile", "strict"))
     melody = parse_soprano(request.get("soprano", ""))
+
+    vocabulary = list(vocabulary_for(key))
+    for token in (request.get("progression") or "").split():
+        if token in vocabulary:
+            continue
+        try:
+            parse_roman(token, key)          # only what the key can spell
+        except (RomanNumeralError, ValueError):
+            continue
+        vocabulary.append(token)
     return {
         "ok": True,
         "notes": [
             {"note": str(note) if note is not None else HOLE,
              "free": note is None,
-             "options": candidates_for(note, key, profile) if note is not None else []}
+             "options": (candidates_for(note, key, profile, vocabulary)
+                         if note is not None else [])}
             for note in melody
         ],
     }
