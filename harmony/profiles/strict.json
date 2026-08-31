@@ -52,7 +52,8 @@
     ],
     "hidden_fourth_leap": "none",
     "hidden_outer_leap": "none",
-    "similar_motion_limit": 3
+    "similar_motion_limit": 3,
+    "position": "any"
   },
   "rules": {
     "voice_range": {
@@ -189,6 +190,11 @@
       "enabled": true,
       "severity": "style",
       "cost": 1.0
+    },
+    "voicing_position": {
+      "enabled": true,
+      "severity": "style",
+      "cost": 25.0
     }
   },
   "notes": "Motion rules are priced, not forbidden: every chord can follow every chord, and what it cost to get there is reported. The prices are far above any ordinary preference, so a clean answer always wins where one exists. Ranges and chord identity stay absolute."

@@ -28,6 +28,7 @@ from ..core.midi import to_bytes as midi_bytes
 from ..core.roman import RomanNumeralError, parse_progression
 from ..core.roman import parse as parse_roman
 from ..core.rules.registry import PROFILE_DIR, Profile
+from ..core.rules.state import position_of
 from ..core.solver import NoRealization, realize, solve
 from ..core.voice import VOICE_NAMES
 
@@ -164,9 +165,13 @@ def midi_for(params: dict) -> tuple[bytes, str]:
 
 def realize_payload(key_text: str, progression: str, profile_name: str,
                     alternates: int, soprano_text: str = "",
-                    figures=None) -> dict:
+                    figures=None, position: str = "any") -> dict:
     key = Key.parse(key_text)
     profile = Profile.load(profile_name)
+    # Asked for per request rather than baked into the profile, because it is
+    # a choice about this phrase and not a rule about music.
+    if position in ("open", "closed"):
+        profile.params["position"] = position
     specs = parse_progression(progression, key)
     melody = parse_soprano(soprano_text) if soprano_text.strip() else None
     width = max(1, min(alternates, 5))
@@ -185,6 +190,9 @@ def realize_payload(key_text: str, progression: str, profile_name: str,
         out.append({
             "cost": round(result.cost, 3),
             "numerals": [sp.numeral for sp in used],
+            # so the page can bracket the runs when a phrase could not be
+            # written one way throughout
+            "positions": [position_of(v) for v in result.voicings],
             # what a numeral *does* and what the chord *is*: two readings of
             # the same sonority, and a student wants both
             "symbols": [sp.symbol for sp in used],
@@ -331,6 +339,7 @@ class Handler(BaseHTTPRequestHandler):
                 alternates=int(request.get("alternates", 1)),
                 soprano_text=request.get("soprano", "") or "",
                 figures=request.get("figures") or [],
+                position=request.get("position", "any"),
             )
         except (RomanNumeralError, NoRealization, ValueError, FileNotFoundError) as exc:
             # These carry the explanation the engine worked out; pass it through

@@ -26,6 +26,52 @@ def voice_range(ctx: StateContext) -> list[Violation]:
     return out
 
 
+def position_of(voicing) -> str:
+    """"open" or "closed", by the distance from soprano to tenor.
+
+    The upper three voices are what the terms describe. Closed means they
+    are packed inside one octave; open means they are not. The bass is not
+    counted - it sits where it likes and often more than an octave below the
+    tenor in both, which is why it cannot be part of the test.
+    """
+    return ("closed" if voicing["soprano"].midi - voicing["tenor"].midi < 12
+            else "open")
+
+
+@register(
+    rule_id="voicing_position",
+    scope="state", severity="style", cost=25.0, category="spacing",
+    explanation=("Keep the upper three voices packed inside an octave, or "
+                 "spread beyond one. Off by default, and a preference rather "
+                 "than a rule when it is on: a phrase that cannot be written "
+                 "one way throughout is written the best way it can be and "
+                 "shows where it changed."),
+)
+def voicing_position(ctx: StateContext) -> list[Violation]:
+    """Asked for, not assumed, and priced rather than required.
+
+    A whole phrase in one position is a thing to aim at and not always a
+    thing to get: the soprano note, the chord under it and the ranges
+    together can leave no closed voicing at all. Pricing it means the engine
+    takes the position where it can and gives it up only where it must -
+    which is also what makes it worth showing on the staff where that
+    happened.
+    """
+    wanted = ctx.profile.param("position", "any")
+    if wanted not in ("open", "closed"):
+        return []
+    here = position_of(ctx.voicing)
+    if here == wanted:
+        return []
+    return [Violation(
+        "voicing_position", ["soprano", "tenor"], ctx.index,
+        f"{here} position: soprano {ctx.voicing['soprano']} to tenor "
+        f"{ctx.voicing['tenor']} is "
+        f"{ctx.voicing['soprano'].midi - ctx.voicing['tenor'].midi} semitones, "
+        f"and {wanted} was asked for",
+    )]
+
+
 @register(
     rule_id="spacing",
     scope="state", severity="error", cost=math.inf, category="spacing",

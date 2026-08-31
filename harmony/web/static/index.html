@@ -1,6 +1,7 @@
 <!doctype html>
 <meta charset="utf-8">
 <title>Four-Part Harmony</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='-0.6 -4.8 4 8.2'>%3Crect x='-0.6' y='-4.8' width='4' height='8.2' fill='%23171D24'/>%3Cpath d='M1.504 -1.66C1.496 -1.708 1.504 -1.712 1.528 -1.736C1.592 -1.796 1.676 -1.88 1.752 -1.964C2.088 -2.332 2.288 -2.808 2.288 -3.26C2.288 -3.608 2.192 -3.952 2.028 -4.192C1.968 -4.28 1.864 -4.392 1.82 -4.392C1.764 -4.392 1.64 -4.288 1.56 -4.2C1.264 -3.872 1.168 -3.372 1.168 -2.956C1.168 -2.724 1.196 -2.464 1.224 -2.3C1.232 -2.252 1.236 -2.244 1.188 -2.204C0.932 -1.992 0.656 -1.748 0.448 -1.492C0.172 -1.148 0 -0.776 0 -0.348C0 0.348 0.476 1.008 1.456 1.008C1.548 1.008 1.652 1 1.732 0.984C1.776 0.976 1.784 0.972 1.792 1.02C1.84 1.288 1.9 1.636 1.9 1.824C1.9 2.416 1.5 2.488 1.264 2.488C1.048 2.488 0.944 2.424 0.944 2.372C0.944 2.344 0.98 2.332 1.072 2.304C1.196 2.268 1.34 2.16 1.34 1.928C1.34 1.708 1.2 1.52 0.956 1.52C0.688 1.52 0.528 1.732 0.528 1.98C0.528 2.24 0.684 2.632 1.288 2.632C1.556 2.632 2.076 2.512 2.076 1.832C2.076 1.604 2.004 1.224 1.96 0.976C1.952 0.928 1.956 0.932 2.012 0.908C2.416 0.748 2.684 0.408 2.684 -0.044C2.684 -0.556 2.308 -1.008 1.72 -1.008C1.616 -1.008 1.616 -1.008 1.604 -1.08ZM1.88 -3.772C2.012 -3.772 2.12 -3.664 2.12 -3.444C2.12 -3.168 1.988 -2.912 1.676 -2.6C1.612 -2.536 1.516 -2.444 1.424 -2.364C1.396 -2.34 1.38 -2.344 1.372 -2.396C1.356 -2.5 1.348 -2.636 1.348 -2.764C1.348 -3.388 1.636 -3.772 1.88 -3.772ZM1.444 -1.048C1.456 -0.972 1.456 -0.976 1.384 -0.952C1.032 -0.832 0.804 -0.516 0.804 -0.176C0.804 0.184 0.992 0.44 1.264 0.532C1.296 0.544 1.344 0.556 1.372 0.556C1.404 0.556 1.42 0.536 1.42 0.512C1.42 0.484 1.388 0.472 1.36 0.46C1.192 0.388 1.072 0.216 1.072 0.032C1.072 -0.196 1.228 -0.368 1.472 -0.436C1.536 -0.452 1.544 -0.448 1.552 -0.404L1.752 0.788C1.76 0.832 1.756 0.832 1.696 0.844C1.632 0.856 1.552 0.864 1.472 0.864C0.772 0.864 0.32 0.476 0.32 -0.08C0.32 -0.316 0.36 -0.632 0.692 -1.008C0.932 -1.276 1.116 -1.424 1.304 -1.576C1.344 -1.608 1.352 -1.604 1.36 -1.56ZM1.72 -0.412C1.712 -0.46 1.716 -0.472 1.764 -0.468C2.088 -0.44 2.356 -0.168 2.356 0.184C2.356 0.436 2.204 0.64 1.98 0.752C1.932 0.776 1.924 0.776 1.916 0.728Z' fill='%23F2A65A' transform='translate(0.35 0)'/>%3C/svg>">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -73,6 +74,20 @@
     color: var(--ink-faint); margin-bottom: 4px;
   }
   .mix-foot { display: flex; gap: 6px; margin-top: 10px; }
+
+  /* White, because it is the one place on the page that is not the app -
+     it is a note to a person. */
+  #suggestion {
+    width: 100%; resize: vertical; font-family: var(--mono); font-size: 12px;
+    line-height: 1.5; padding: 8px 9px; border-radius: 3px;
+    background: #F4F6F8; color: #14181D; border: 1px solid var(--panel-edge);
+  }
+  #suggestion::placeholder { color: #7A8590; }
+  #suggestion:focus-visible { outline: 2px solid var(--amber); outline-offset: 1px; }
+  .suggest-note { font-size: 10px; line-height: 1.5; margin-top: 8px;
+                  color: var(--ink-faint); }
+  .suggest-note.err { color: var(--red); }
+  .suggest-note.ok  { color: var(--cyan-dim); }
   .panel {
     background: var(--panel-deep);
     background-image: linear-gradient(180deg, rgba(255,255,255,.028), rgba(0,0,0,.18));
@@ -249,6 +264,18 @@
      names is a picture of the column of noteheads. */
   .voicing    { font-family: var(--mono); font-size: 9px; text-anchor: middle;
                 letter-spacing: .04em; }
+  /* Runs of one position, braced and named, for a phrase that could not be
+     written one way throughout. */
+  .brace      { fill: none; stroke: var(--cyan-dim); stroke-width: 1.2; }
+  .brace-label{ fill: var(--cyan-dim); font-family: var(--mono); font-size: 9px;
+                text-anchor: middle; letter-spacing: .1em; }
+  /* The teaching overlay. */
+  .ivl-line   { stroke: var(--ink-faint); stroke-width: .8; stroke-dasharray: 2 2; }
+  .ivl-move   { stroke: var(--amber-dim); stroke-width: .8; }
+  .ivl-label  { fill: var(--ink-faint); font-family: var(--mono); font-size: 8px;
+                text-anchor: middle; }
+  .ivl-move-label { fill: var(--amber-dim); font-family: var(--mono); font-size: 8px;
+                text-anchor: middle; }
   .numeral    { fill: var(--cyan); font-family: var(--mono); font-size: 14px;
                 text-anchor: middle; }
   .col-hit    { fill: transparent; }
@@ -280,6 +307,11 @@
      alignment pushed every other label out of line with its own. */
   .controls { display: flex; flex-wrap: wrap; gap: 12px 14px; align-items: flex-start; }
   .field { display: flex; flex-direction: column; gap: 5px; }
+  /* The hidden attribute is a user-agent rule and loses to any class that
+     sets display. A .field marked hidden stayed on screen because of the
+     line above it - which is how the embellishment menu was showing while
+     its mode was off. */
+  [hidden] { display: none !important; }
   .field label {
     font-size: 9px; letter-spacing: .14em; text-transform: uppercase;
     color: var(--ink-faint);
@@ -304,6 +336,8 @@
   button:disabled { opacity: .35; cursor: default; }
   button.primary { color: var(--amber); border-color: var(--amber-dim); background: #1C1811; }
   button.on { color: var(--cyan); border-color: var(--cyan-dim); background: #111A19; }
+  button.danger { color: var(--red); border-color: #5B2E28; background: #1E1413; }
+  button.danger:hover:not(:disabled) { color: var(--red); border-color: var(--red); }
   button.playing { color: var(--cyan); border-color: var(--cyan-dim); background: #111A19; }
   button:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
 
@@ -320,6 +354,8 @@
   a.export[aria-disabled="true"] { opacity: .35; pointer-events: none; }
   a.export:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
 
+  .key-row { display: flex; gap: 6px; }
+  .key-row select { flex: 1 1 auto; min-width: 0; }
   .tempo-row { display: flex; align-items: center; gap: 9px; }
   input[type=range] { width: 132px; accent-color: var(--amber); padding: 0; border: 0; background: none; }
   .tempo-val { font-size: 13px; color: var(--amber); min-width: 58px; }
@@ -445,10 +481,11 @@
   </div>
 
   <div class="transport">
+    <button class="primary" id="go">Realize</button>
     <button id="play" disabled>Play</button>
-    <button id="reset"
-            title="Empty the staff, start again, and ask the questions you turned off">Reset</button>
     <a id="export" class="export" href="#" download>Export MIDI</a>
+    <button id="reset" class="danger"
+            title="Empty the staff, start again, and ask the questions you turned off">Reset</button>
     <div class="chips" id="alts"></div>
   </div>
 
@@ -456,8 +493,21 @@
 
   <div class="controls">
     <div class="field">
-      <label for="key">Key</label>
-      <select id="key"></select>
+      <label for="tonic">Key</label>
+      <div class="key-row">
+        <select id="tonic"></select>
+        <select id="mode">
+          <option value="major">major</option>
+          <option value="minor">minor</option>
+        </select>
+      </div>
+      <select id="key" hidden></select>
+      <label for="position" class="stacked">Position</label>
+      <select id="position">
+        <option value="any">any</option>
+        <option value="closed">closed</option>
+        <option value="open">open</option>
+      </select>
     </div>
 
     <div class="field grow">
@@ -466,20 +516,21 @@
              placeholder="I IV V I  ·  i N6 V i  ·  i iv Ger+6 V  ·  I V/V V I">
       <div class="inserts" id="inserts"></div>
       <div class="prog-actions">
-        <button class="primary" id="go">Realize</button>
+        <button id="keep"
+                title="Work from a fixed melody. The box appears, the tune stays put, and only new chords are left to the engine.">Keep soprano</button>
+        <button id="figuresOn" title="Show embellishments, and the menu for them">Embellishments</button>
+        <button id="intervals" title="Draw every interval and label it">Intervals</button>
       </div>
 
-      <label for="soprano" class="stacked">Soprano &mdash; optional<span
-        class="held-key" id="heldKey"></span></label>
-      <input id="soprano" spellcheck="false"
-             placeholder="E5 F5 D5 C5  &middot;  leave empty to let the engine choose">
-      <div class="prog-actions">
-        <button id="keep" disabled
-                title="Hold this soprano. Add a chord and the tune stays; only the new chord is left for the engine.">Keep soprano</button>
+      <div id="sopranoField" hidden>
+        <label for="soprano" class="stacked">Soprano<span
+          class="held-key" id="heldKey"></span></label>
+        <input id="soprano" spellcheck="false"
+               placeholder="E5 F5 D5 C5">
       </div>
     </div>
 
-    <div class="field">
+    <div class="field" id="figureField" hidden>
       <label for="figure">Embellishment</label>
       <select id="figure"></select>
       <div class="figure-actions">
@@ -537,6 +588,21 @@
       <div class="mix-foot">
         <button id="mixReset">Reset</button>
       </div>
+    </div>
+  </section>
+
+  <section class="panel" id="suggestPanel">
+    <header>
+      <h2>Send me suggestions</h2>
+      <button class="panel-x" data-panel="suggestPanel" title="Close">&times;</button>
+    </header>
+    <div class="panel-body">
+      <textarea id="suggestion" rows="4" spellcheck="true"
+                placeholder="What would make this better?"></textarea>
+      <div class="mix-foot">
+        <button id="suggestSend" class="primary">Send</button>
+      </div>
+      <div class="suggest-note" id="suggestNote"></div>
     </div>
   </section>
 </aside>
@@ -894,8 +960,9 @@
      where one will fit; which of those to take is nobody's choice but the
      writer's, so this lives here and is sent with every realization. */
   var chosen = {};                 // slot string -> true, as the engine writes it
-  function chosenList() { return Object.keys(chosen); }
+  function chosenList() { return figuresOn ? Object.keys(chosen) : []; }
   function currentKind() {
+    if (!figuresOn) return "";        // nothing is offered while it is off
     var box = document.getElementById("figure");
     return box ? box.value : "passing";
   }
@@ -903,7 +970,47 @@
   /* Whether the realized soprano is held across re-realizations. */
   var keeping = false;
 
+  /* Embellishments are a mode, not a permanent part of the page. Off, the
+     menu for them is gone and none are drawn - which is the state to be in
+     while reading the harmony itself. */
+  var figuresOn = false;
+  /* The teaching overlay: every interval drawn and named. */
+  var showIntervals = false;
+
   /* ---------- drawing ---------- */
+
+  /* Interval names, worked out from the two things a written interval is:
+     how many letter names it spans and how many semitones. The letters give
+     the number, the semitones give the quality, and crossing them is the
+     only way to tell a diminished fifth from an augmented fourth - they
+     sound identical and are not the same interval. */
+  var QUALITY = {
+    1: {0: "P", 1: "A"},
+    2: {0: "d", 1: "m", 2: "M", 3: "A"},
+    3: {2: "d", 3: "m", 4: "M", 5: "A"},
+    4: {4: "d", 5: "P", 6: "A"},
+    5: {6: "d", 7: "P", 8: "A"},
+    6: {7: "d", 8: "m", 9: "M", 10: "A"},
+    7: {9: "d", 10: "m", 11: "M", 12: "A"},
+  };
+
+  function namedInterval(low, high) {
+    var steps = dia(high) - dia(low);
+    var semis = high.midi - low.midi;
+    var octaves = Math.floor(steps / 7);
+    var generic = steps - octaves * 7 + 1;
+    var simple = semis - octaves * 12;
+    var quality = (QUALITY[generic] || {})[simple];
+    var name = (quality || "?") + generic;
+    return octaves > 0 ? name + "+" + octaves + "8ve" : name;
+  }
+
+  function movement(from, to) {
+    if (from.midi === to.midi) return "\u2014";        // held
+    var low = from.midi < to.midi ? from : to;
+    var high = from.midi < to.midi ? to : from;
+    return (to.midi > from.midi ? "\u2191" : "\u2193") + namedInterval(low, high);
+  }
 
   function ledgersFor(d) {
     /* The gap between the staves is only two spaces wide, so middle C is the
@@ -951,7 +1058,8 @@
     var lowest = Math.min.apply(null, positions);
     var NAMES_H = 4 * 11 + 8;          // four names, then a gap
     var top = Math.min(yOf(TREBLE[4]) - 16, yOf(highest) - STEM - 8) - NAMES_H;
-    var bottom = Math.max(yOf(BASS[0]) + 16, yOf(lowest) + STEM + 8) + 26;
+    var BRACE_H = 34;      // a brace and the word over it, when drawn
+    var bottom = Math.max(yOf(BASS[0]) + 16, yOf(lowest) + STEM + 8) + 26 + BRACE_H;
     var H = bottom - top;
 
     score.setAttribute("width", W);
@@ -1139,6 +1247,51 @@
         sym.textContent = symbols[index];
         score.appendChild(sym);
       }
+      /* The teaching overlay: every neighbouring pair joined and named.
+         Neighbouring in pitch within a chord - soprano to alto, alto to
+         tenor, tenor to bass, which are the pairs an ear actually hears as
+         intervals - and neighbouring in time along each voice. */
+      if (showIntervals) {
+        /* Neighbours on the right, everything else on the left.
+           Soprano-alto, alto-tenor and tenor-bass are the pairs the ear
+           picks out first, so they sit close to the chord. The three that
+           skip a voice - soprano to tenor, alto to bass, and the outer pair
+           - are the ones that decide whether the spacing is open or closed
+           and where a hidden fifth comes from, so they get their own side
+           rather than crowding the same one. */
+        for (var vi = 0; vi < VOICES.length - 1; vi++) {
+          var hi = chord[VOICES[vi]], lo = chord[VOICES[vi + 1]];
+          var yHi = yOf(dia(hi)), yLo = yOf(dia(lo));
+          score.appendChild(line(x + 22, yHi, x + 22, yLo, "ivl-line"));
+          var name = el("text", { "class": "ivl-label", x: x + 34,
+                                  y: (yHi + yLo) / 2 + 3 });
+          name.textContent = namedInterval(lo, hi);
+          score.appendChild(name);
+        }
+        [[0, 2], [1, 3], [0, 3]].forEach(function (pair, depth) {
+          var hi = chord[VOICES[pair[0]]], lo = chord[VOICES[pair[1]]];
+          var yHi = yOf(dia(hi)), yLo = yOf(dia(lo));
+          var at = x - 20 - depth * 13;
+          score.appendChild(line(at, yHi, at, yLo, "ivl-line"));
+          var name = el("text", { "class": "ivl-label", x: at - 1,
+                                  y: (yHi + yLo) / 2 + 3 });
+          name.textContent = namedInterval(lo, hi);
+          score.appendChild(name);
+        });
+        if (index + 1 < chords.length) {
+          var nextX = LEFT + CLEF_W + sigCount * sigW + (index + 1) * COL_W + COL_W / 2;
+          VOICES.forEach(function (name) {
+            var from = chord[name], to = chords[index + 1][name];
+            var y1 = yOf(dia(from)), y2 = yOf(dia(to));
+            score.appendChild(line(x + 9, y1, nextX - 9, y2, "ivl-move"));
+            var step = el("text", { "class": "ivl-move-label",
+                                    x: (x + nextX) / 2, y: (y1 + y2) / 2 - 3 });
+            step.textContent = movement(from, to);
+            score.appendChild(step);
+          });
+        }
+      }
+
       /* Highest first, so the names read down the column the way the
          noteheads do. Sorted by pitch rather than trusting the voice order:
          they cannot cross, but the list should be a picture of the staff
@@ -1152,6 +1305,45 @@
           score.appendChild(t);
         });
     });
+
+    /* Where the position changed, and where it did not.
+
+       Only drawn when one was asked for and the phrase could not be written
+       that way throughout - which is the case the brace exists to explain.
+       A run of chords sharing a position gets one brace and one word, so
+       what the reader sees is the shape of the compromise rather than a
+       label on every chord. */
+    /* Drawn when a position was asked for and the phrase could not be
+       written that way throughout - the case the brace exists to explain -
+       and whenever the interval overlay is on, where which chords are open
+       and which are closed is part of what is being taught rather than a
+       report on a compromise. */
+    var asked = document.getElementById("position").value;
+    var positions = payload.results[resultIndex].positions || [];
+    var compromised = asked !== "any" &&
+      positions.some(function (p) { return p !== asked; });
+    if (positions.length && (compromised || showIntervals)) {
+      var runStart = 0;
+      for (var at = 1; at <= positions.length; at++) {
+        if (at < positions.length && positions[at] === positions[runStart]) continue;
+        var colOf = function (i) {
+          return LEFT + CLEF_W + sigCount * sigW + i * COL_W + COL_W / 2;
+        };
+        var x1 = colOf(runStart) - COL_W * 0.34;
+        var x2 = colOf(at - 1) + COL_W * 0.34;
+        var y = bottom - 54;
+        var mid = (x1 + x2) / 2;
+        /* A curly brace: two arcs meeting at a point in the middle. */
+        score.appendChild(el("path", { "class": "brace", d:
+          "M" + x1 + " " + y +
+          " q0 -6 6 -6 H" + (mid - 6) + " q6 0 6 -6" +
+          " q0 6 6 6 H" + (x2 - 6) + " q6 0 6 6" }));
+        var word = el("text", { "class": "brace-label", x: mid, y: y - 14 });
+        word.textContent = positions[runStart];
+        score.appendChild(word);
+        runStart = at;
+      }
+    }
   }
 
   /* One delegate for both: an offer becomes a note, a note becomes an offer
@@ -1413,6 +1605,7 @@
           key: document.getElementById("key").value,
           progression: document.getElementById("prog").value,
           profile: PROFILE,
+          position: document.getElementById("position").value,
           tempo: document.getElementById("tempo").value,
           soprano: melodyText(),
           alt: String(currentIndex),
@@ -1698,6 +1891,7 @@
           soprano: melodyText(),
           alternates: 3,
           figures: chosenList(),
+          position: document.getElementById("position").value,
         });
       })
       .then(function (payload) {
@@ -1759,21 +1953,67 @@
       });
   }
 
-  /* key list: every major and minor whose signature stays inside 6 accidentals */
-  var KEYS = [];
-  ["C", "G", "D", "A", "E", "B", "F#", "F", "Bb", "Eb", "Ab", "Db", "Gb"]
-    .forEach(function (t) { KEYS.push(t + " major"); });
-  ["a", "e", "b", "f#", "c#", "g#", "d#", "d", "g", "c", "f", "bb", "eb"]
-    .forEach(function (t) { KEYS.push(t + " minor"); });
+  /* Every key whose signature stays inside six accidentals, which is every
+     key that is actually written. Beyond that the two spellings of the same
+     sound both exist and neither is more correct, so offering both would be
+     offering a choice with no answer.
+
+     The tonic and the mode are picked separately because that is how anyone
+     thinks of a key, but the engine is still given one string. The hidden
+     select is that string, and remains the only thing the rest of the page
+     reads - two controls, one fact.
+
+     No natural, harmonic or melodic here. Those name which degrees a
+     *scale* raises. Four-part writing does not choose one for a whole
+     piece: the seventh is raised where a chord wants a leading tone and the
+     sixth where the line does, and both are written as accidentals against
+     a natural-minor signature. The engine already does exactly that, so a
+     menu offering the choice would be describing a decision nobody makes. */
+  var MAJOR_TONICS = ["C", "G", "D", "A", "E", "B", "F#", "F", "Bb", "Eb", "Ab", "Db", "Gb"];
+  var MINOR_TONICS = ["a", "e", "b", "f#", "c#", "g#", "d#", "d", "g", "c", "f", "bb", "eb"];
 
   var keySelect = document.getElementById("key");
-  KEYS.forEach(function (k) {
+  MAJOR_TONICS.concat(MINOR_TONICS).forEach(function (t, i) {
     var option = document.createElement("option");
-    option.value = k;
-    option.textContent = k;
+    option.value = t + (i < MAJOR_TONICS.length ? " major" : " minor");
+    option.textContent = option.value;
     keySelect.appendChild(option);
   });
   keySelect.value = "C major";
+
+  var tonicSelect = document.getElementById("tonic");
+  var modeSelect = document.getElementById("mode");
+
+  function fillTonics(mode, want) {
+    var list = mode === "minor" ? MINOR_TONICS : MAJOR_TONICS;
+    tonicSelect.innerHTML = "";
+    list.forEach(function (t) {
+      var option = document.createElement("option");
+      option.value = t;
+      option.textContent = t;
+      tonicSelect.appendChild(option);
+    });
+    tonicSelect.value = list.indexOf(want) >= 0 ? want : list[0];
+  }
+
+  /* Changing the mode keeps the same letter where that letter exists in the
+     other mode - C major to C minor rather than to A minor - because the
+     writer picked the letter and only meant to change the mode. */
+  function syncKey() {
+    var chosenKey = tonicSelect.value + " " + modeSelect.value;
+    if (keySelect.value === chosenKey) return;
+    keySelect.value = chosenKey;
+    keySelect.dispatchEvent(new Event("change"));
+  }
+
+  fillTonics("major", "C");
+  modeSelect.addEventListener("change", function () {
+    var was = tonicSelect.value;
+    var swap = modeSelect.value === "minor" ? was.toLowerCase() : was.toUpperCase();
+    fillTonics(modeSelect.value, swap);
+    syncKey();
+  });
+  tonicSelect.addEventListener("change", syncKey);
 
   /* insert buttons for the characters a keyboard hides */
   [["°", "diminished, as in vii°"], ["ø", "half diminished, as in viiø7"],
@@ -1855,6 +2095,38 @@
     realize(true);
   });
 
+  /* Keeping the soprano is now the whole idea of working from a melody: the
+     box is part of the mode rather than a field that happens to sit there.
+     Turning it off empties it, because a melody nobody can see is still
+     pinning every chord underneath it. */
+  function setKeeping(on, capture) {
+    keeping = !!on;
+    var button = document.getElementById("keep");
+    button.classList.toggle("on", keeping);
+    button.textContent = keeping ? "Soprano held" : "Keep soprano";
+    document.getElementById("sopranoField").hidden = !keeping;
+    if (keeping) {
+      if (capture && current && current.ok) captureSoprano(current);
+    } else {
+      document.getElementById("soprano").value = "";
+      document.getElementById("options").innerHTML = "";
+      choices = [];
+    }
+    showHeldKey();
+  }
+
+  function setFigures(on) {
+    figuresOn = !!on;
+    document.getElementById("figuresOn").classList.toggle("on", figuresOn);
+    document.getElementById("figureField").hidden = !figuresOn;
+    if (!figuresOn) chosen = {};
+  }
+
+  function setIntervals(on) {
+    showIntervals = !!on;
+    document.getElementById("intervals").classList.toggle("on", showIntervals);
+  }
+
   /* Which mode the held tune is in. Shown only while it is held, because
      that is when it is a fact about the melody rather than about whatever
      the key box happens to say at the moment. The tonic is already in the
@@ -1866,25 +2138,34 @@
       keeping ? (key.indexOf("minor") >= 0 ? "minor" : "major") : "";
   }
 
-  var keepButton = document.getElementById("keep");
-  keepButton.addEventListener("click", function () {
-    keeping = !keeping;
-    keepButton.classList.toggle("on", keeping);
-    keepButton.textContent = keeping ? "Soprano held" : "Keep soprano";
-    if (!keeping) {
-      showHeldKey();
+  document.getElementById("keep").addEventListener("click", function () {
+    var turningOn = !keeping;
+    setKeeping(turningOn, true);
+    if (!turningOn) {
       setStatus("soprano released - the engine may choose a new tune", "ok");
+      if (current) realize();
       return;
     }
-    if (current && current.ok) captureSoprano(current);
-    showHeldKey();
     /* Holding the soprano is the moment the melody becomes something to
-       harmonize, so the chords that can carry each note are what the writer
-       wants to see next. Capturing the tune without offering them left the
-       box empty until the melody was touched again for no reason. */
+       harmonize, so the chords that can carry each note are what comes next. */
     loadOptions();
     setStatus("soprano held - add a chord and only the new one is left to the engine",
               "ok");
+  });
+
+  document.getElementById("figuresOn").addEventListener("click", function () {
+    setFigures(!figuresOn);
+    markDirty();
+    if (current) realize(true);
+  });
+
+  document.getElementById("intervals").addEventListener("click", function () {
+    setIntervals(!showIntervals);
+    if (current) draw(current, currentIndex);
+  });
+
+  document.getElementById("position").addEventListener("change", function () {
+    if (document.getElementById("prog").value.trim()) realize();
   });
 
   /* Back to an empty staff. Distinct from Clear, which takes out the
@@ -1962,17 +2243,18 @@
        never the tune's to give. */
     function load(item) {
       document.getElementById("key").value = item.key;
+      showKey(item.key);
       lastKey = item.key;
-      document.getElementById("soprano").value = item.soprano || "";
       document.getElementById("prog").value = item.soprano ? "" : item.prog;
       document.getElementById("options").innerHTML = "";
       choices = [];
       chosen = {};
-      keeping = false;
-      var keep = document.getElementById("keep");
-      keep.classList.remove("on");
-      keep.textContent = "Keep soprano";
-    showHeldKey();
+      /* A melody is something to hold; a feeling is not. The mode is set
+         fresh either way, so picking a feeling after a melody does not leave
+         the old tune quietly pinning every chord. */
+      setKeeping(false);
+      document.getElementById("soprano").value = item.soprano || "";
+      if (item.soprano) setKeeping(true);
       /* Loading something is not the writer's own work, so the next thing
          they do is what makes this dirty again - not this. */
       dirty = false;
@@ -2182,6 +2464,68 @@
      chords that can carry each note and extends the progression if the tune
      has grown, which is what pressing Enter in the melody box already did -
      the button should not be the poorer way of asking. */
+  /* ---------- suggestions ----------
+
+     The site is a single static file with no server behind it, so there is
+     nothing here that can send mail. A relay does it: the box posts to a
+     form service, the service holds the address and forwards the message,
+     and the address never appears in the page, in the source, or in any
+     request a reader can see. That is the point - a mailto: link would put
+     it in plain sight of every scraper that ever reads this file.
+
+     Until an endpoint is set the box says so rather than pretending to
+     send. Getting one is a minute of work at formspree.io or any service
+     like it: make a form, point it at the address, paste the id below. */
+  var SUGGESTION_ENDPOINT = "";      // e.g. "https://formspree.io/f/xxxxxxxx"
+
+  (function () {
+    var box = document.getElementById("suggestion");
+    var send = document.getElementById("suggestSend");
+    var note = document.getElementById("suggestNote");
+
+    function say(text, kind) {
+      note.textContent = text;
+      note.className = "suggest-note" + (kind ? " " + kind : "");
+    }
+
+    if (!SUGGESTION_ENDPOINT) {
+      say("Not connected yet - set SUGGESTION_ENDPOINT in the page.");
+    }
+
+    send.addEventListener("click", function () {
+      var text = box.value.trim();
+      if (!text) { say("Write something first.", "err"); box.focus(); return; }
+      if (!SUGGESTION_ENDPOINT) {
+        say("Not connected yet - set SUGGESTION_ENDPOINT in the page.", "err");
+        return;
+      }
+      send.disabled = true;
+      say("Sending\u2026");
+      fetch(SUGGESTION_ENDPOINT, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Accept": "application/json" },
+        body: JSON.stringify({
+          message: text,
+          /* what the page was doing, which is most of what makes a
+             suggestion actionable */
+          context: document.getElementById("key").value + "  " +
+                   document.getElementById("prog").value,
+          version: document.getElementById("version").textContent,
+        }),
+      })
+        .then(function (r) {
+          send.disabled = false;
+          if (!r.ok) throw new Error(r.status);
+          box.value = "";
+          say("Sent. Thank you.", "ok");
+        })
+        .catch(function () {
+          send.disabled = false;
+          say("That did not go through. Try again in a moment.", "err");
+        });
+    });
+  })();
+
   document.getElementById("go").addEventListener("click", function () {
     if (melodyText()) refreshMelody(); else realize();
   });
@@ -2212,6 +2556,13 @@
 
      Any figures already chosen go. A slot names the pitch it decorates, and
      after a transposition those pitches are not there any more. */
+  /* Put a key string back into the two controls. */
+  function showKey(text) {
+    var bits = String(text).split(" ");
+    modeSelect.value = bits[1] === "minor" ? "minor" : "major";
+    fillTonics(modeSelect.value, bits[0]);
+  }
+
   var lastKey = keySelect.value;
 
   function isMinor(name) { return name.indexOf("minor") >= 0; }
