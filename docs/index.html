@@ -226,8 +226,6 @@
                 letter-spacing: .04em; }
   .numeral    { fill: var(--cyan); font-family: var(--mono); font-size: 14px;
                 text-anchor: middle; }
-  .beat       { fill: var(--ink-faint); font-family: var(--mono); font-size: 10px;
-                text-anchor: middle; }
   .col-hit    { fill: transparent; }
   .col-hit.on { fill: rgba(242,166,90,.09); }
 
@@ -252,7 +250,10 @@
   .figure.v-bass    .head { stroke: var(--v-bass); }
 
   /* ---- controls at the bottom ---- */
-  .controls { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; }
+  /* Aligned at the top, not the bottom. The progression field is taller
+     than the others now that Realize and Keep sit under it, and bottom
+     alignment pushed every other label out of line with its own. */
+  .controls { display: flex; flex-wrap: wrap; gap: 12px 14px; align-items: flex-start; }
   .field { display: flex; flex-direction: column; gap: 5px; }
   .field label {
     font-size: 9px; letter-spacing: .14em; text-transform: uppercase;
@@ -344,7 +345,25 @@
   .exceptions .exc-what { color: var(--cyan-dim); margin-top: 5px; }
   .exceptions .exc-why { color: var(--ink-faint); margin: 2px 0 0 14px; max-width: 74ch; }
 
-  .hint { font-size: 11px; color: var(--ink-faint); line-height: 1.6; }
+  .transport {
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    padding-bottom: 2px;
+  }
+  .transport .chips { margin-left: auto; }
+  .prog-actions { display: flex; gap: 6px; margin-top: 7px; }
+  .field label.stacked { margin-top: 12px; }
+
+  .hint { font-size: 11px; color: var(--ink-faint); line-height: 1.7; }
+  .hint h3 {
+    font-size: 10px; letter-spacing: .14em; text-transform: uppercase;
+    color: var(--ink-faint); font-weight: 400; margin: 0 0 8px;
+  }
+  .vocab {
+    display: grid; grid-template-columns: max-content 1fr;
+    gap: 4px 16px; margin: 0;
+  }
+  .vocab dt { color: var(--ink-faint); }
+  .vocab dd { margin: 0; display: flex; gap: 8px; flex-wrap: wrap; }
   .hint code { color: var(--cyan); }
 </style>
 
@@ -372,13 +391,7 @@
       <h2>Popular melodies</h2>
       <button class="panel-x" data-panel="tunePanel" title="Close">&times;</button>
     </header>
-    <div class="panel-body">
-      <label class="mix-label" for="soprano">Soprano &mdash; optional</label>
-      <input id="soprano" spellcheck="false" class="melody-box"
-             placeholder="E5 F5 D5 C5  &middot;  or pick one">
-      <div class="mix-sep"></div>
-      <div id="tuneList"></div>
-    </div>
+    <div class="panel-body"><div id="tuneList"></div></div>
   </section>
 </aside>
 
@@ -399,8 +412,14 @@
     <span class="build" id="build"></span>
   </div>
 
+  <div class="transport">
+    <button id="play" disabled>Play</button>
+    <button id="reset" title="Empty the staff and start again">Reset</button>
+    <a id="export" class="export" href="#" download>Export MIDI</a>
+    <div class="chips" id="alts"></div>
+  </div>
+
   <div class="status" id="status"></div>
-  <div class="chips" id="alts"></div>
 
   <div class="controls">
     <div class="field">
@@ -410,9 +429,20 @@
 
     <div class="field grow">
       <label for="prog">Progression</label>
-      <input id="prog" value="I ii6 V I" spellcheck="false"
+      <input id="prog" value="" spellcheck="false"
              placeholder="I IV V I  ·  i N6 V i  ·  i iv Ger+6 V  ·  I V/V V I">
       <div class="inserts" id="inserts"></div>
+      <div class="prog-actions">
+        <button class="primary" id="go">Realize</button>
+      </div>
+
+      <label for="soprano" class="stacked">Melody (soprano) &mdash; optional</label>
+      <input id="soprano" spellcheck="false"
+             placeholder="E5 F5 D5 C5  &middot;  leave empty to let the engine choose">
+      <div class="prog-actions">
+        <button id="keep" disabled
+                title="Hold this soprano. Add a chord and the tune stays; only the new chord is left for the engine.">Keep soprano</button>
+      </div>
     </div>
 
     <div class="field">
@@ -426,28 +456,24 @@
       </div>
     </div>
 
-    <button class="primary" id="go">Realize</button>
-    <button id="keep" disabled
-            title="Hold this soprano. Add a chord and the tune stays; only the new chord is left for the engine.">Keep soprano</button>
-    <button id="play" disabled>Play</button>
-    <a id="export" class="export" href="#" download>Export MIDI</a>
   </div>
 
   <div class="exceptions" id="exceptions"></div>
   <div class="options" id="options"></div>
 
   <div class="hint">
-    Triads and sevenths in any inversion (<code>I6</code>, <code>V65</code>),
-    secondary dominants (<code>V/V</code>, <code>vii&#176;7/V</code>),
-    diminished sevenths (<code>vii&#176;7</code>), augmented triads
-    (<code>III+</code>, <code>V+</code>), chords borrowed from the parallel
-    mode (<code>&#9837;VI</code>, <code>&#9837;III</code>,
-    <code>&#9837;VII</code>), and augmented sixths
-    (<code>It+6</code>, <code>Fr+6</code>, <code>Ger+6</code>).
-    Stems up are soprano and tenor; stems down are alto and bass.
-    Also the Neapolitan (<code>N6</code>). Write a melody to harmonize it: every
-    chord that can carry each note appears below, and clicking one rebuilds the
-    progression. Rules the engine breaks on purpose are listed with the reason.
+    <h3>Chords you can write</h3>
+    <dl class="vocab">
+      <dt>Triads</dt><dd><code>I</code> <code>ii</code> <code>iii</code> <code>IV</code> <code>V</code> <code>vi</code></dd>
+      <dt>Inversions</dt><dd><code>I6</code> <code>ii6</code> <code>V6</code></dd>
+      <dt>Sevenths</dt><dd><code>V7</code> <code>V65</code> <code>V43</code></dd>
+      <dt>Diminished</dt><dd><code>vii&#176;6</code> <code>vii&#176;7</code> <code>ii&#176;6</code></dd>
+      <dt>Augmented</dt><dd><code>III+</code> <code>V+</code></dd>
+      <dt>Secondary dominants</dt><dd><code>V/V</code> <code>V7/IV</code> <code>vii&#176;7/V</code></dd>
+      <dt>Borrowed</dt><dd><code>&#9837;VI</code> <code>&#9837;III</code> <code>&#9837;VII</code></dd>
+      <dt>Neapolitan</dt><dd><code>N6</code></dd>
+      <dt>Augmented sixths</dt><dd><code>It+6</code> <code>Fr+6</code> <code>Ger+6</code></dd>
+    </dl>
   </div>
 </div>
 
@@ -881,19 +907,19 @@ window.HARMONY_SOURCES = {
      the beat it decorates. */
   var MELODIES = [
     { title: "Ode to Joy", source: "Beethoven",
-      key: "C major", prog: "I vi ii V I6 IV I V",
+      key: "C major",
       soprano: "E5 E5 F5 G5 G5 F5 E5 D5",
       slots: [] },
     { title: "Twinkle, Twinkle", source: "traditional",
-      key: "C major", prog: "I IV6 V7 I6 vi IV I",
+      key: "C major",
       soprano: "C4 C4 G4 G4 A4 A4 G4",
       slots: [] },
     { title: "Mary Had a Little Lamb", source: "traditional",
-      key: "C major", prog: "I V6 I V6 I vi I",
+      key: "C major",
       soprano: "E4 D4 C4 D4 E4 E4 E4",
       slots: [] },
     { title: "London Bridge", source: "traditional",
-      key: "C major", prog: "I IV I6 IV I ii I",
+      key: "C major",
       soprano: "G4 A4 G4 F4 E4 F4 G4",
       slots: [] },
   ];
@@ -962,7 +988,7 @@ window.HARMONY_SOURCES = {
     var lowest = Math.min.apply(null, positions);
     var NAMES_H = 4 * 11 + 8;          // four names, then a gap
     var top = Math.min(yOf(TREBLE[4]) - 16, yOf(highest) - STEM - 8) - NAMES_H;
-    var bottom = Math.max(yOf(BASS[0]) + 16, yOf(lowest) + STEM + 8) + 38;
+    var bottom = Math.max(yOf(BASS[0]) + 16, yOf(lowest) + STEM + 8) + 26;
     var H = bottom - top;
 
     score.setAttribute("width", W);
@@ -1150,10 +1176,6 @@ window.HARMONY_SOURCES = {
         sym.textContent = symbols[index];
         score.appendChild(sym);
       }
-      var beat = el("text", { "class": "beat", x: x, y: bottom - 40 });
-      beat.textContent = index + 1;
-      score.appendChild(beat);
-
       /* Highest first, so the names read down the column the way the
          noteheads do. Sorted by pitch rather than trusting the voice order:
          they cannot cross, but the list should be a picture of the staff
@@ -1666,6 +1688,10 @@ window.HARMONY_SOURCES = {
 
   function realize(keepAlternate) {
     stopPlayback();
+    if (!document.getElementById("prog").value.trim()) {
+      setStatus("write a progression, or pick a feeling or a melody", "ok");
+      return Promise.resolve();
+    }
     setBusy(true);
     setStatus("working…");
 
@@ -1854,6 +1880,34 @@ window.HARMONY_SOURCES = {
               "ok");
   });
 
+  /* Back to an empty staff. Distinct from Clear, which takes out the
+     embellishments and leaves the piece; this takes out the piece. The
+     mixer keeps its own settings and its own reset - what you have muted
+     while listening is not part of what you wrote. */
+  document.getElementById("reset").addEventListener("click", function () {
+    stopPlayback();
+    current = null;
+    currentIndex = 0;
+    chosen = {};
+    choices = [];
+    keeping = false;
+    dirty = false;
+    document.getElementById("prog").value = "";
+    document.getElementById("soprano").value = "";
+    document.getElementById("options").innerHTML = "";
+    document.getElementById("exceptions").innerHTML = "";
+    var keep = document.getElementById("keep");
+    keep.classList.remove("on");
+    keep.textContent = "Keep soprano";
+    ["play", "keep", "addAll", "clearFigures"].forEach(function (id) {
+      document.getElementById(id).disabled = true;
+    });
+    draw(null, 0);
+    renderAlternates(null);
+    updateExport();
+    setStatus("write a progression, or pick a feeling or a melody", "ok");
+  });
+
   /* The export link builds on demand when the backend charges a search for
      it. The first click makes the file and then clicks itself again, by
      which point the href is real and the browser handles it as it would any
@@ -1890,19 +1944,24 @@ window.HARMONY_SOURCES = {
         function (h) { h.setAttribute("aria-expanded", "false"); });
     }
 
-    /* One loader for both lists. A feeling brings a progression and no
-       melody; a tune brings a melody, the chords under it and the figures
-       that decorate it. */
+    /* One loader for both lists, and they ask for different things.
+
+       A feeling is a progression: it goes in the box and gets realized. A
+       melody is only a melody. It fills the soprano and leaves the chords
+       empty, so the harmonizer does what it is for - every chord that can
+       carry each note appears underneath, and the writer picks. Shipping a
+       progression with the tune would be handing over an answer that was
+       never the tune's to give. */
     function load(item) {
       confirmBox.hidden = true;
       pending = null;
       document.getElementById("key").value = item.key;
-      document.getElementById("prog").value = item.prog;
+      lastKey = item.key;
       document.getElementById("soprano").value = item.soprano || "";
+      document.getElementById("prog").value = item.soprano ? "" : item.prog;
       document.getElementById("options").innerHTML = "";
       choices = [];
       chosen = {};
-      (item.slots || []).forEach(function (slot) { chosen[slot] = true; });
       keeping = false;
       var keep = document.getElementById("keep");
       keep.classList.remove("on");
@@ -1910,7 +1969,7 @@ window.HARMONY_SOURCES = {
       /* Loading something is not the writer's own work, so the next thing
          they do is what makes this dirty again - not this. */
       dirty = false;
-      realize();
+      if (item.soprano) refreshMelody(); else realize();
     }
 
     function choose(item) {
@@ -1991,10 +2050,7 @@ window.HARMONY_SOURCES = {
       src.className = "src";
       src.textContent = tune.source + "  ·  " + tune.key;
       item.appendChild(src);
-      var how = document.createElement("span");
-      how.className = "how";
-      how.textContent = tune.prog;
-      item.appendChild(how);
+
       item.addEventListener("click", function () { choose(tune); });
       tunes.appendChild(item);
     });
@@ -2119,8 +2175,12 @@ window.HARMONY_SOURCES = {
       document.getElementById("build").textContent = "engine " + (d.build || "?");
     }).catch(function () {});
 
+  /* Nothing on the staff to begin with. An opening progression looks like
+     the writer's work when it is not, and the first thing anybody does is
+     replace it - which, now that picking a feeling or a melody asks before
+     it overwrites, meant being asked about a piece nobody wrote. */
   draw(null, 0);
   updateExport();
-  realize();
+  setStatus("write a progression, or pick a feeling or a melody", "ok");
 })();
 </script>
