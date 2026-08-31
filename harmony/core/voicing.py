@@ -12,7 +12,7 @@ from .key import Key
 from .pitch import Pitch, PitchClass
 from .roman import ChordSpec
 from .rules.registry import Profile, StateContext, evaluate_state
-from .voice import VOICE_NAMES, Voicing
+from .voice import Voicing
 
 
 def pitches_in_range(pc: PitchClass, low: Pitch, high: Pitch) -> list[Pitch]:

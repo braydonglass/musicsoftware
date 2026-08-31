@@ -21,9 +21,11 @@ from ..core.checker import check, errors_only, explained_breaks
 from ..core.embellish import apply as place_figures
 from ..core.embellish import opportunities
 from ..core.key import Key
-from ..core.melody import HOLE, candidates_for, parse_soprano
+from ..core.melody import (HOLE, candidates_for, parse_soprano, suggest,
+                           transpose, vocabulary_for, workable)
 from ..core.midi import to_bytes as midi_bytes
 from ..core.roman import RomanNumeralError, parse_progression
+from ..core.roman import parse as parse_roman
 from ..core.rules.registry import PROFILE_DIR, Profile
 from ..core.solver import NoRealization, realize, solve
 from ..core.voice import VOICE_NAMES
@@ -57,19 +59,69 @@ def candidates_payload(request: dict) -> dict:
     A hole - a note the writer left for the engine - has no options to
     offer and is passed straight through, so a partly pinned melody does
     not break the chord chips underneath it.
+
+    Whatever is already written is offered too. The teaching vocabulary is
+    a starting list for an empty progression, not a fence around one that
+    exists: a writer who typed V+ and then held the soprano was shown no V+
+    to hold on to, and the chord silently became I. Under a D-sharp there
+    was nothing on offer at all.
     """
     key = Key.parse(request.get("key", "C major"))
     profile = Profile.load(request.get("profile", "strict"))
     melody = parse_soprano(request.get("soprano", ""))
+
+    vocabulary = list(vocabulary_for(key))
+    for token in (request.get("progression") or "").split():
+        if token in vocabulary:
+            continue
+        try:
+            parse_roman(token, key)          # only what the key can spell
+        except (RomanNumeralError, ValueError):
+            continue
+        vocabulary.append(token)
+    found = [candidates_for(note, key, profile, vocabulary) if note is not None else []
+             for note in melody]
+
+    # Then drop the ones that cannot be joined to their neighbours. Carrying
+    # the note is only half of what a chord has to do, and a button that
+    # errors when pressed is worse than no button - see workable().
+    usable = workable([[o["numeral"] for o in options] for options in found],
+                      melody, key, profile)
+    found = [[o for o in options if o["numeral"] in keep]
+             for options, keep in zip(found, usable)]
+
+    notes = [
+        {"note": str(note) if note is not None else HOLE,
+         "free": note is None,
+         "options": options}
+        for note, options in zip(melody, found)
+    ]
+    # One chord per note, chosen across the phrase rather than one note at a
+    # time - see suggest(). The page uses it wherever nothing is written.
     return {
         "ok": True,
-        "notes": [
-            {"note": str(note) if note is not None else HOLE,
-             "free": note is None,
-             "options": candidates_for(note, key, profile) if note is not None else []}
-            for note in melody
-        ],
+        "suggested": suggest([[o["numeral"] for o in n["options"]] for n in notes],
+                             key),
+        "notes": notes,
     }
+
+
+def transpose_payload(request: dict) -> dict:
+    """The same melody on the same scale degrees of another key.
+
+    Kept in the engine rather than done in the page. The page would have to
+    grow its own idea of what a scale degree is and how a key spells one,
+    and that copy would drift from this one - which is the reason the solver
+    and the checker share their rules rather than each having a set.
+    """
+    from_key = Key.parse(request.get("from", "C major"))
+    to_key = Key.parse(request.get("to", "C major"))
+    profile = Profile.load(request.get("profile", "strict"))
+    melody = parse_soprano(request.get("soprano", ""))
+    low, high = profile.ranges["soprano"]
+    moved = transpose(melody, from_key, to_key, low, high)
+    return {"ok": True,
+            "soprano": " ".join(HOLE if p is None else str(p) for p in moved)}
 
 
 def parse_figures(text: str) -> list[str]:
@@ -132,6 +184,9 @@ def realize_payload(key_text: str, progression: str, profile_name: str,
         out.append({
             "cost": round(result.cost, 3),
             "numerals": [sp.numeral for sp in used],
+            # what a numeral *does* and what the chord *is*: two readings of
+            # the same sonority, and a student wants both
+            "symbols": [sp.symbol for sp in used],
             "substitutions": [
                 {"chord": i, "written": w, "used": u}
                 for i, w, u in result.substitutions(specs)
@@ -240,7 +295,7 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(data)
 
     def do_POST(self):
-        if self.path not in ("/api/realize", "/api/candidates"):
+        if self.path not in ("/api/realize", "/api/candidates", "/api/transpose"):
             self._send(404, b"not found", "text/plain")
             return
         try:
@@ -250,9 +305,11 @@ class Handler(BaseHTTPRequestHandler):
             self._json(400, {"ok": False, "error": "the request body was not JSON"})
             return
 
-        if self.path == "/api/candidates":
+        if self.path in ("/api/candidates", "/api/transpose"):
+            work = (candidates_payload if self.path.endswith("candidates")
+                    else transpose_payload)
             try:
-                self._json(200, candidates_payload(request))
+                self._json(200, work(request))
             except (RomanNumeralError, ValueError, FileNotFoundError) as exc:
                 self._json(200, {"ok": False, "error": str(exc)})
             return

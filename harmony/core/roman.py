@@ -14,7 +14,7 @@ Still absent: modal mixture beyond what an explicit quality mark asks for.
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from .key import Key
 from .pitch import LETTER_SEMITONES, PitchClass
@@ -78,6 +78,49 @@ class ChordSpec:
     @property
     def chroma_set(self) -> set[int]:
         return {pc.chroma for pc in self.pitch_classes}
+
+    @property
+    def symbol(self) -> str:
+        """The chord as a player would name it: C, Am, G7/B, F#dim.
+
+        A Roman numeral says what a chord *does* in its key; a chord symbol
+        says what it *is*. They are two readings of the same sonority and a
+        student needs both - V65 in C and G7/B are the same four notes, and
+        the numeral is the half that stops meaning anything the moment the
+        key changes.
+
+        Only the numeral is returned for an augmented sixth. It is not built
+        in thirds, so it has no root to name it after: writing it as a
+        dominant seventh on the flat sixth would say something false about a
+        chord whose whole identity is the interval it is named for.
+        """
+        if self.aug6_type is not None:
+            return self.numeral
+        root = str(self.root_pc)
+        third = self.pitch_classes[1] if len(self.pitch_classes) > 1 else None
+        fifth = self.pitch_classes[2] if len(self.pitch_classes) > 2 else None
+        semis = lambda pc: (pc.chroma - self.root_pc.chroma) % 12
+        minor_third = third is not None and semis(third) == 3
+        flat_fifth = fifth is not None and semis(fifth) == 6
+        sharp_fifth = fifth is not None and semis(fifth) == 8
+
+        if self.seventh_pc is None:
+            quality = ("dim" if minor_third and flat_fifth else
+                       "aug" if not minor_third and sharp_fifth else
+                       "m" if minor_third else "")
+        else:
+            seventh = semis(self.seventh_pc)
+            if minor_third and flat_fifth:
+                quality = "dim7" if seventh == 9 else "m7b5"
+            elif minor_third:
+                quality = "m7" if seventh == 10 else "mMaj7"
+            else:
+                quality = "7" if seventh == 10 else "maj7"
+
+        name = root + quality
+        if self.bass_pc.chroma != self.root_pc.chroma:
+            name += "/" + str(self.bass_pc)
+        return name
 
     def __str__(self) -> str:
         return f"{self.numeral} [{' '.join(str(pc) for pc in self.pitch_classes)}]"

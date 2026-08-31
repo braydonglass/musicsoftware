@@ -324,6 +324,67 @@ class NoPerfectIntervalSurvives(unittest.TestCase):
                       "the doubling waiver should still be doing the work")
 
 
+class TheQualitySurvivesTheDoubling(unittest.TestCase):
+    """Doubling is negotiable. What the chord *is* never was.
+
+    The rule that a chord keeps its root and its third let go of the fifth
+    in every case, which is right for a perfect fifth - it says nothing the
+    root has not already said, and dropping it to double the root is how an
+    incomplete triad is written. It is wrong for an altered one. V+ came
+    back as G G G B: the root tripled, the augmented fifth gone, and
+    nothing left that is augmented about it. That is a major chord with the
+    wrong name on it, not a doubling choice.
+    """
+
+    ALTERED = [
+        ("C major", "I V+ vi IV", 1),
+        ("C major", "I III+ vi IV", 1),
+        ("a minor", "i III+ iv V i", 1),
+        ("C major", "I vii°7 I IV", 1),
+        ("a minor", "i iv vii°7 i", 2),
+    ]
+
+    def test_an_altered_fifth_is_never_the_tone_that_gets_dropped(self):
+        profile = Profile.load("strict")
+        for key_text, progression, index in self.ALTERED:
+            with self.subTest(progression=progression):
+                key = Key.parse(key_text)
+                specs = parse_progression(progression, key)
+                result = solve(specs, key, profile)[0]
+                spec = (result.specs or specs)[index]
+                sounding = {str(result.voicings[index][name].pitch_class)
+                            for name in VOICE_NAMES}
+                for pc in spec.pitch_classes:
+                    self.assertIn(
+                        str(pc), sounding,
+                        f"{spec.numeral} was written without its {pc}: "
+                        f"{sorted(sounding)}")
+
+    def test_a_perfect_fifth_may_still_be_dropped(self):
+        """The permission that made the bug possible is still wanted.
+
+        An incomplete triad - root doubled, fifth omitted - is ordinary
+        practice, and tightening the altered case must not have taken it
+        away.
+        """
+        from harmony.core.rules.registry import REGISTRY, StateContext
+        from harmony.core.voicing import generate
+        key = Key.parse("C major")
+        profile = Profile.load("strict")
+        spec = parse_progression("I", key)[0]
+        rule = REGISTRY["missing_essential_tone"]
+        # generate() hands back (voicing, cost) pairs
+        incomplete = [v for v, _ in generate(spec, key, profile)
+                      if len({v[name].pitch_class.chroma
+                              for name in VOICE_NAMES}) == 2]
+        self.assertTrue(incomplete, "no incomplete triad was generated at all")
+        for voicing in incomplete[:5]:
+            ctx = StateContext(voicing=voicing, spec=spec, key=key, index=0,
+                               profile=profile)
+            self.assertEqual(rule.check(ctx), [],
+                             "a plain triad may omit its perfect fifth")
+
+
 class TestCLI(unittest.TestCase):
     def run_cli(self, argv):
         out, err = io.StringIO(), io.StringIO()

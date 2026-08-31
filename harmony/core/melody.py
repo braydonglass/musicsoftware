@@ -11,10 +11,12 @@ it may double a tendency tone.
 
 from __future__ import annotations
 
+import math
+
 from .key import Key
 from .pitch import Pitch
 from .roman import ChordSpec, RomanNumeralError, parse
-from .rules.registry import Profile
+from .rules.registry import Profile, TransitionContext, evaluate_transition
 from .voicing import generate
 
 # A teaching vocabulary: the chords a first harmonization exercise draws on.
@@ -71,6 +73,227 @@ def _function_of(spec: ChordSpec) -> str:
     if spec.degree in (1, 3, 6):
         return "tonic"
     return "other"
+
+
+# Where each chord likes to go next, and how much it likes it. Not a rule -
+# nothing here refuses anything - just the ordinary pull of functional
+# harmony, used to choose between chords that can all carry the same note.
+#
+# The dominant family is spelled the same in both modes and belongs to
+# both, so it points at both tonics. Listing only the major one was a real
+# mistake and not a cosmetic one: in a minor key V65 -> i then scored zero,
+# nothing preferred it to V65 -> iv, and the search cheerfully chose a
+# retrogression the solver could not connect. A key never mixes the two, so
+# naming both targets costs nothing.
+GOES_TO = {
+    "I":     {"IV": 3, "V": 3, "vi": 3, "ii": 3, "iii": 2, "I6": 1, "V6": 2, "vii°6": 1},
+    "I6":    {"IV": 3, "ii": 3, "V": 3, "vi": 2, "I": 1},
+    "ii":    {"V": 4, "V7": 4, "V65": 3, "vii°6": 2, "I6": 1},
+    "ii6":   {"V": 4, "V7": 4, "V65": 3, "I6": 1},
+    "iii":   {"vi": 3, "IV": 3, "ii": 2, "I6": 1},
+    "IV":    {"V": 4, "I": 3, "ii": 2, "V7": 3, "I6": 2, "vii°6": 1},
+    "IV6":   {"V": 3, "I": 2},
+    "V":     {"I": 4, "i": 4, "vi": 2, "VI": 2, "I6": 1, "i6": 1},
+    "V6":    {"I": 4, "i": 4},
+    "V7":    {"I": 4, "i": 4, "vi": 1, "VI": 1},
+    "V65":   {"I": 4, "i": 4},
+    "V43":   {"I6": 3, "i6": 3, "I": 2, "i": 2},
+    "vi":    {"ii": 3, "IV": 3, "V": 2, "iii": 1},
+    "vi6":   {"ii": 2, "V": 2},
+    "vii°6": {"I": 4, "i": 4, "I6": 3, "i6": 3},
+    "N6":    {"V": 4, "V7": 3, "V65": 3},
+    "i":     {"iv": 3, "V": 3, "VI": 3, "ii°6": 3, "III": 2, "i6": 1, "V6": 2,
+              "vii°6": 1, "vii°7": 2},
+    "i6":    {"iv": 3, "ii°6": 3, "V": 3, "VI": 2, "i": 1},
+    "ii°6":  {"V": 4, "V7": 4, "V65": 3, "i6": 1},
+    "III":   {"VI": 3, "iv": 3, "ii°6": 2, "i6": 1},
+    "iv":    {"V": 4, "i": 3, "V7": 3, "i6": 2, "N6": 3, "vii°7": 2},
+    "iv6":   {"V": 3, "i": 2},
+    "VI":    {"ii°6": 3, "iv": 3, "V": 2, "III": 1, "N6": 2},
+    "vii°7": {"i": 4, "i6": 3, "I": 4, "I6": 3},
+}
+TONIC = {"major": ("I", "I6"), "minor": ("i", "i6")}
+DOMINANT = ("V", "V6", "V7", "V65", "vii°6", "vii°7")
+BEAM = 40
+
+
+def workable(options: list[list[str]], melody: list[Pitch | None],
+             key: Key, profile: Profile) -> list[list[str]]:
+    """Prune each note's chords to the ones that can actually be used.
+
+    candidates_for answers whether a chord can carry a note. It cannot
+    answer whether that chord can be reached from the one before it or left
+    for the one after, because that is not a fact about either chord alone -
+    so the list it returns contains chords that produce an error the moment
+    they are clicked.
+
+    A progression is a chain, and on a chain pairwise consistency is not an
+    approximation. Prune any chord with no partner in a neighbour, repeat
+    until nothing changes, and what survives is exactly the set of chords
+    that appear in at least one progression the transition rules allow: an
+    arc-consistent tree has a solution, and every value left in a domain
+    belongs to one of them.
+
+    Only the transition rules are consulted, and only between neighbours.
+    Whether the whole thing then realizes is still the solver's to say -
+    it weighs costs, three-chord context and re-voicing, none of which are
+    pairwise. This removes what certainly cannot work, not everything that
+    might not.
+    """
+    rules = profile.rules("transition")
+    specs: list[dict[str, ChordSpec]] = []
+    voicings: list[dict[str, list]] = []
+    for index, note in enumerate(melody):
+        here_specs, here_voicings = {}, {}
+        for token in options[index]:
+            try:
+                spec = parse(token, key)
+            except (RomanNumeralError, ValueError):
+                continue
+            found = generate(spec, key, profile, soprano=note)
+            if not found:
+                continue
+            here_specs[token] = spec
+            here_voicings[token] = [v for v, _ in found]
+        specs.append(here_specs)
+        voicings.append(here_voicings)
+
+    domains = [list(d.keys()) for d in specs]
+
+    def joins(index: int, left: str, right: str) -> bool:
+        """Is there any pair of voicings the rules will let through?"""
+        for a in voicings[index][left]:
+            for b in voicings[index + 1][right]:
+                ctx = TransitionContext(a=a, b=b, spec_a=specs[index][left],
+                                        spec_b=specs[index + 1][right],
+                                        key=key, index=index, profile=profile)
+                _, cost = evaluate_transition(ctx, rules)
+                if not math.isinf(cost):
+                    return True
+        return False
+
+    changed = True
+    while changed:
+        changed = False
+        for index in range(len(domains) - 1):
+            kept = [c for c in domains[index]
+                    if any(joins(index, c, n) for n in domains[index + 1])]
+            if len(kept) != len(domains[index]):
+                domains[index] = kept
+                changed = True
+            kept = [n for n in domains[index + 1]
+                    if any(joins(index, c, n) for c in domains[index])]
+            if len(kept) != len(domains[index + 1]):
+                domains[index + 1] = kept
+                changed = True
+    # A note pruned to nothing is worse than a note offering something that
+    # will not work: it leaves no button at all. Keep what was there.
+    return [kept or options[i] for i, kept in enumerate(domains)]
+
+
+def suggest(options: list[list[str]], key: Key) -> list[str]:
+    """Choose one chord per note, reading the melody as a phrase.
+
+    Picking each note's first workable chord independently is what produces
+    i i ii°6 i i ii°6 i ii°6: every chord carries its note and the line as a
+    whole goes nowhere, and often will not realize at all, because whether
+    two chords can be connected is not a fact about either of them alone.
+
+    So the choice is made across the phrase with a beam search - open on the
+    tonic, follow the ordinary pull of one chord toward the next, cadence at
+    the end, and do not sit on one chord for three beats together. No rule
+    is consulted and nothing is refused here; this only decides between
+    chords that can all carry the same note. The solver still has the final
+    word, and still says so when it cannot connect them.
+    """
+    if not options or any(not choices for choices in options):
+        return [choices[0] if choices else "" for choices in options]
+    root, first_inversion = TONIC[key.mode]
+    beam = [([c], 10 if c == root else 6 if c == first_inversion else 0)
+            for c in options[0]]
+    for position in range(1, len(options)):
+        last = position == len(options) - 1
+        reachable = any(c in TONIC[key.mode] for c in options[position])
+        nxt = []
+        for sequence, score in beam:
+            for chord in options[position]:
+                value = score + GOES_TO.get(sequence[-1], {}).get(chord, 0)
+                if chord == sequence[-1]:
+                    value -= 1
+                    if len(sequence) > 1 and sequence[-2] == chord:
+                        value -= 4
+                if "\u00b0" in chord:
+                    # A diminished chord is every-note-a-tendency-tone, which
+                    # leaves the fewest ways in and out of it: chosen as a
+                    # default it is the one most likely to be a chord the
+                    # solver then cannot connect. Wanted where the melody
+                    # asks for it, not where anything else would do.
+                    value -= 3
+                if last:
+                    if reachable and chord in TONIC[key.mode]:
+                        value += 8
+                        if chord == root:
+                            value += 4
+                        if sequence[-1] in DOMINANT:
+                            value += 8
+                    elif not reachable and chord in ("V", "V6", "V7"):
+                        # the tune ends where no tonic reaches, so the phrase
+                        # is asking for a half cadence
+                        value += 10
+                        if chord == "V":
+                            value += 4
+                nxt.append((sequence + [chord], value))
+        nxt.sort(key=lambda pair: -pair[1])
+        beam = nxt[:BEAM]
+    return beam[0][0]
+
+
+def transpose(melody: list[Pitch | None], from_key: Key, to_key: Key,
+              low: Pitch | None = None, high: Pitch | None = None
+              ) -> list[Pitch | None]:
+    """The same tune on the same scale degrees of a different key.
+
+    Solfege, not semitones. Mi in C major is E; mi in G major is B; and in C
+    minor it is E-flat, because what is being kept is the degree and what
+    spells it is the mode. Transposing by interval instead would carry C
+    major's E straight into C minor and hand back a melody the key does not
+    contain.
+
+    An accidental keeps its distance from the scale rather than its letter,
+    so a raised seventh stays a raised seventh: it is written against the new
+    key's signature, not copied across from the old one's.
+
+    The whole line then moves by octaves until it sits in the soprano's
+    range. Degrees are preserved by octave, so this changes nothing about
+    which notes they are - and if no octave fits, the untransposed octave is
+    handed back rather than a silently mangled one, because a melody that
+    cannot be sung in the new key is a fact for the caller to see.
+    """
+    from_sig, to_sig = from_key.signature(), to_key.signature()
+    moved: list[Pitch | None] = []
+    for pitch in melody:
+        if pitch is None:
+            moved.append(None)
+            continue
+        # distance from the tonic in letter-steps, which is the degree
+        steps = pitch.diatonic_index - from_key.tonic.letter
+        index = to_key.tonic.letter + steps
+        letter = index % 7
+        away = pitch.alteration - from_sig[pitch.letter]
+        moved.append(Pitch(letter, index // 7, to_sig[letter] + away))
+
+    if low is None or high is None:
+        return moved
+    real = [p for p in moved if p is not None]
+    if not real:
+        return moved
+    for shift in (0, -1, 1, -2, 2):
+        candidate = [None if p is None else Pitch(p.letter, p.octave + shift, p.alteration)
+                     for p in moved]
+        inside = [p for p in candidate if p is not None]
+        if all(low.midi <= p.midi <= high.midi for p in inside):
+            return candidate
+    return moved
 
 
 def parse_soprano(text: str) -> list[Pitch | None]:

@@ -8,6 +8,11 @@ partly pinned.
 
 import unittest
 
+from harmony.core.key import Key
+from harmony.core.melody import parse_soprano
+from harmony.core.roman import parse_progression
+from harmony.core.rules.registry import Profile
+from harmony.core.solver import NoRealization, solve
 from harmony.web.server import candidates_payload, midi_for, realize_payload
 
 
@@ -89,3 +94,98 @@ class TestMidiExport(unittest.TestCase):
         plain, _ = midi_for(dict(self.BASE))
         stale, _ = midi_for(dict(self.BASE, figures="0:soprano:passing:Z9"))
         self.assertEqual(plain, stale)
+
+
+class WhatIsWrittenIsOffered(unittest.TestCase):
+    """The teaching vocabulary must not eat a chord the writer typed.
+
+    candidates_for draws on a short list of chords a first harmonization
+    exercise uses. That is right for an empty progression and wrong for one
+    that already exists: I V+ vi IV in C major offered no V+ under any note,
+    so holding the soprano rebuilt the chords from what was on offer and the
+    augmented triad silently became I. Under its D-sharp there was nothing
+    on offer at all.
+    """
+
+    def options_for(self, note, progression=""):
+        payload = candidates_payload({
+            "key": "C major", "soprano": note, "progression": progression})
+        return [o["numeral"] for o in payload["notes"][0]["options"]]
+
+    def test_a_chord_outside_the_vocabulary_is_offered_once_it_is_written(self):
+        self.assertNotIn("V+", self.options_for("B4"))
+        self.assertIn("V+", self.options_for("B4", "I V+ vi IV"))
+
+    def test_a_note_only_that_chord_can_carry_is_not_left_with_nothing(self):
+        self.assertEqual(self.options_for("D#5"), [])
+        self.assertEqual(self.options_for("D#5", "I V+ vi IV"), ["V+"])
+
+    def test_a_numeral_the_key_cannot_spell_is_ignored_not_fatal(self):
+        """Half-typed and nonsense numerals reach here constantly."""
+        for junk in ("I Xq7 V", "I V+", "", "   ", "I vii"):
+            with self.subTest(progression=junk):
+                self.assertIn("I", self.options_for("G4", junk))
+
+    def test_the_vocabulary_is_not_duplicated_by_what_is_written(self):
+        offered = self.options_for("G4", "I I6 V V")
+        self.assertEqual(len(offered), len(set(offered)))
+
+
+class ChoosingChordsAcrossThePhrase(unittest.TestCase):
+    """A chord per note is not the same problem as a progression.
+
+    Taking each note's first workable chord gives every note a chord that
+    carries it and a line that goes nowhere - i i ii°6 i i ii°6 i ii°6 for
+    Ode to Joy in C minor - and often one the solver cannot connect at all,
+    because whether two chords go together is not a fact about either of
+    them by itself. suggest() reads the phrase instead.
+    """
+
+    MELODIES = [
+        ("c minor", "Eb5 Eb5 F5 G5 G5 F5 Eb5 D5"),
+        ("C major", "E5 E5 F5 G5 G5 F5 E5 D5"),
+        ("C major", "C4 C4 G4 G4 A4 A4 G4"),
+        ("C major", "E4 D4 C4 D4 E4 E4 E4"),
+        ("C major", "G4 A4 G4 F4 E4 F4 G4"),
+        ("a minor", "A4 B4 C5 B4 A4 G#4 A4"),
+        ("g minor", "Bb4 Bb4 C5 D5 D5 C5 Bb4 A4"),
+        ("G major", "D5 E5 D5 C5 B4 C5 D5"),
+        ("d minor", "D5 E5 F5 E5 D5 C#5 D5"),
+        ("Eb major", "G4 G4 Ab4 Bb4 Bb4 Ab4 G4 F4"),
+    ]
+
+    def suggestion(self, key_text, melody):
+        payload = candidates_payload({"key": key_text, "soprano": melody})
+        return payload["suggested"]
+
+    def test_every_suggestion_actually_realizes(self):
+        profile = Profile.load("strict")
+        for key_text, melody in self.MELODIES:
+            with self.subTest(key=key_text, melody=melody):
+                key = Key.parse(key_text)
+                suggested = self.suggestion(key_text, melody)
+                self.assertEqual(len(suggested), len(melody.split()))
+                specs = parse_progression(" ".join(suggested), key)
+                solve(specs, key, profile, soprano=parse_soprano(melody))
+
+    def test_it_beats_taking_the_first_chord_that_fits(self):
+        """The failure that motivated this, kept as the example."""
+        payload = candidates_payload(
+            {"key": "c minor", "soprano": "Eb5 Eb5 F5 G5 G5 F5 Eb5 D5"})
+        naive = [n["options"][0]["numeral"] for n in payload["notes"]]
+        self.assertNotEqual(naive, payload["suggested"])
+        key = Key.parse("c minor")
+        melody = parse_soprano("Eb5 Eb5 F5 G5 G5 F5 Eb5 D5")
+        with self.assertRaises(NoRealization):
+            solve(parse_progression(" ".join(naive), key), key,
+                  Profile.load("strict"), soprano=melody)
+
+    def test_it_ends_somewhere(self):
+        """A phrase reaching a tonic should cadence on one."""
+        suggested = self.suggestion("C major", "C4 C4 G4 G4 A4 A4 G4")
+        self.assertIn(suggested[-1], ("I", "I6"))
+
+    def test_a_note_with_no_chord_does_not_crash_it(self):
+        payload = candidates_payload({"key": "c minor", "soprano": "E5 F5 G5"})
+        self.assertEqual(len(payload["suggested"]), 3)
+        self.assertEqual(payload["suggested"][0], "")

@@ -181,10 +181,12 @@ def doubling_preference(ctx: StateContext) -> list[Violation]:
 @register(
     rule_id="missing_essential_tone",
     scope="state", severity="error", cost=math.inf, category="doubling",
-    explanation=("A chord needs its root and its third. The root names it and "
-                 "the third gives it quality - without either it is not the "
-                 "chord that was written. Everything else, including which tone "
-                 "gets doubled, is negotiable when the voice leading demands it."),
+    explanation=("A chord needs its root and its third, and its fifth too when "
+                 "that fifth is what makes it the chord it is. The root names "
+                 "it, the third gives it quality, and in an augmented or "
+                 "diminished triad so does the fifth. Everything else, "
+                 "including which tone gets doubled, is negotiable when the "
+                 "voice leading demands it."),
 )
 def missing_essential_tone(ctx: StateContext) -> list[Violation]:
     """The one doubling fact that is not a preference.
@@ -208,6 +210,18 @@ def missing_essential_tone(ctx: StateContext) -> list[Violation]:
         essential[ctx.spec.pitch_classes[0]] = "root"
         if len(ctx.spec.pitch_classes) >= 2:
             essential[ctx.spec.pitch_classes[1]] = "third"
+        # A perfect fifth may go: it adds nothing the root has not already
+        # said, which is why an incomplete triad doubles the root and drops
+        # it. An altered fifth is the opposite. It is the whole difference
+        # between V+ and V, and between vii° and a minor triad - keep the
+        # root and the third of an augmented triad and let the augmented
+        # fifth go and what is left is a plain major chord with a wrong name
+        # on it. The quality has to survive the doubling, so the tone
+        # carrying the quality cannot be the one dropped.
+        if (ctx.spec.quality in ("augmented", "diminished")
+                and len(ctx.spec.pitch_classes) >= 3):
+            essential[ctx.spec.pitch_classes[2]] = (
+                ctx.spec.quality + " fifth")
 
     return [
         Violation("missing_essential_tone", [], ctx.index,
