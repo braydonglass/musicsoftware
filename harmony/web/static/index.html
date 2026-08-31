@@ -37,7 +37,7 @@
 
   .shell {
     display: flex; gap: 14px; align-items: flex-start;
-    width: 100%; max-width: 1244px;
+    width: 100%; max-width: 1468px;
   }
   .rig {
     background: var(--panel-deep);
@@ -52,17 +52,51 @@
      The order is the content. It runs from the lightest affect at the top to
      the heaviest at the bottom, and the colour runs with it, so the shape of
      the list says what the list is before a word of it is read. */
-  .feelings {
-    flex: 0 0 236px; width: 236px;
+  .side { flex: 0 0 236px; width: 236px; display: flex; flex-direction: column; gap: 14px; }
+  .side.right { flex: 0 0 210px; width: 210px; }
+
+  /* ---- mixer ---- */
+  .mix-row { display: flex; align-items: center; gap: 6px; padding: 4px 0; }
+  .mix-row .who {
+    font-size: 10px; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--tone); width: 40px; flex: 0 0 40px;
+  }
+  .mix-row input[type=range] { width: 74px; accent-color: var(--tone); }
+  .mix-btn {
+    padding: 4px 5px; font-size: 9px; letter-spacing: 0; min-width: 20px;
+  }
+  .mix-btn.on { color: var(--amber); border-color: var(--amber-dim); background: #1C1811; }
+  .mix-btn.mute.on { color: var(--red); border-color: var(--red); background: #1E1413; }
+  .mix-sep { border-top: 1px solid var(--panel-edge); margin: 9px 0 4px; }
+  .mix-label {
+    font-size: 10px; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--ink-faint); margin-bottom: 4px;
+  }
+  .mix-foot { display: flex; gap: 6px; margin-top: 10px; }
+  .panel {
     background: var(--panel-deep);
     background-image: linear-gradient(180deg, rgba(255,255,255,.028), rgba(0,0,0,.18));
     border: 1px solid var(--panel-edge); border-radius: 6px;
     padding: 14px; display: flex; flex-direction: column; gap: 2px;
   }
-  .feelings h2 {
-    font-size: 10px; letter-spacing: .14em; text-transform: uppercase;
-    color: var(--ink-faint); margin: 0 0 8px; font-weight: 400;
+  .panel > header {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 8px;
   }
+  .panel h2 {
+    font-size: 10px; letter-spacing: .14em; text-transform: uppercase;
+    color: var(--ink-faint); margin: 0; font-weight: 400;
+  }
+  /* Closes to its own title, which is also the way back in. Hiding it
+     outright would leave nothing to click. */
+  .panel-x {
+    padding: 2px 7px; font-size: 12px; line-height: 1; letter-spacing: 0;
+    border-color: transparent; background: none;
+  }
+  .panel-x:hover { color: var(--ink); border-color: var(--panel-edge); }
+  .panel[data-closed] > .panel-body { display: none; }
+  .panel[data-closed] > header { margin-bottom: 0; }
+  .panel-body { display: flex; flex-direction: column; gap: 2px; }
   .feel {
     display: flex; align-items: center; gap: 8px; width: 100%;
     font-family: var(--mono); font-size: 12px; text-align: left;
@@ -98,9 +132,26 @@
   .feel-confirm .row { display: flex; gap: 6px; margin-top: 8px; }
   .feel-confirm button { font-size: 10px; padding: 6px 9px; }
 
+  /* ---- melodies ---- */
+  .melody-box { width: 100%; font-size: 12px; padding: 8px 9px; }
+  .tune {
+    display: block; width: 100%; text-align: left; font-family: var(--mono);
+    font-size: 12px; text-transform: none; letter-spacing: .02em;
+    padding: 7px 8px; border-radius: 3px; cursor: pointer;
+    border: 1px solid transparent; background: none; color: var(--ink);
+  }
+  .tune:hover { background: var(--recess); border-color: var(--panel-edge); }
+  .tune .src { display: block; font-size: 10px; color: var(--ink-faint); margin-top: 2px; }
+  .tune .how { display: block; font-size: 10px; color: var(--cyan-dim); margin-top: 3px; }
+
+  @media (max-width: 1180px) {
+    .shell { flex-wrap: wrap; }
+    .side.right { flex: 1 1 100%; width: 100%; order: 3; }
+    .side.right .mix-row input[type=range] { width: 40%; }
+  }
   @media (max-width: 940px) {
     .shell { flex-direction: column; }
-    .feelings { flex: none; width: 100%; }
+    .side, .side.right { flex: none; width: 100%; }
   }
 
   /* ---- score on top ---- */
@@ -163,6 +214,15 @@
     width: 9px; height: 9px; border-radius: 50%; display: inline-block;
   }
   .build { margin-left: auto; color: var(--ink-faint); font-size: 10px; }
+  /* The chord as a player names it, under the numeral that says what it
+     does. Dimmer, because the numeral is the thing being taught. */
+  .symbol     { fill: var(--ink-faint); font-family: var(--mono); font-size: 10px;
+                text-anchor: middle; letter-spacing: .02em; }
+  /* The sounding notes, stacked over their chord in the order they sit on
+     the staff - soprano at the top, bass at the bottom - so the column of
+     names is a picture of the column of noteheads. */
+  .voicing    { font-family: var(--mono); font-size: 9px; text-anchor: middle;
+                letter-spacing: .04em; }
   .numeral    { fill: var(--cyan); font-family: var(--mono); font-size: 14px;
                 text-anchor: middle; }
   .beat       { fill: var(--ink-faint); font-family: var(--mono); font-size: 10px;
@@ -289,8 +349,7 @@
 
 <div class="shell">
 
-<aside class="feelings">
-  <h2>Feelings</h2>
+<aside class="side">
   <div class="feel-confirm" id="feelConfirm" hidden>
     <span id="feelConfirmText">Replace what you are working on?</span>
     <div class="row">
@@ -298,7 +357,28 @@
       <button id="feelNo">Keep mine</button>
     </div>
   </div>
-  <div id="feelList"></div>
+
+  <section class="panel" id="feelPanel">
+    <header>
+      <h2>Feelings</h2>
+      <button class="panel-x" data-panel="feelPanel" title="Close">&times;</button>
+    </header>
+    <div class="panel-body"><div id="feelList"></div></div>
+  </section>
+
+  <section class="panel" id="tunePanel">
+    <header>
+      <h2>Popular melodies</h2>
+      <button class="panel-x" data-panel="tunePanel" title="Close">&times;</button>
+    </header>
+    <div class="panel-body">
+      <label class="mix-label" for="soprano">Soprano &mdash; optional</label>
+      <input id="soprano" spellcheck="false" class="melody-box"
+             placeholder="E5 F5 D5 C5  &middot;  or pick one">
+      <div class="mix-sep"></div>
+      <div id="tuneList"></div>
+    </div>
+  </section>
 </aside>
 
 <div class="rig">
@@ -334,12 +414,6 @@
       <div class="inserts" id="inserts"></div>
     </div>
 
-    <div class="field grow">
-      <label for="soprano">Melody (soprano) &mdash; optional</label>
-      <input id="soprano" spellcheck="false"
-             placeholder="E5 F5 D5 C5    &middot;    leave empty to let the engine choose">
-    </div>
-
     <div class="field">
       <label for="figure">Embellishment</label>
       <select id="figure"></select>
@@ -348,14 +422,6 @@
                 title="Place every one of these that fits, everywhere it fits">Add all</button>
         <button id="clearFigures" disabled
                 title="Take out every embellishment, of every kind">Clear</button>
-      </div>
-    </div>
-
-    <div class="field">
-      <label for="tempo">Tempo</label>
-      <div class="tempo-row">
-        <input type="range" id="tempo" min="40" max="200" step="2" value="84">
-        <span class="tempo-val" id="tempoVal">84 bpm</span>
       </div>
     </div>
 
@@ -383,6 +449,36 @@
     progression. Rules the engine breaks on purpose are listed with the reason.
   </div>
 </div>
+
+<aside class="side right">
+  <section class="panel" id="mixPanel">
+    <header>
+      <h2>Mixer</h2>
+      <button class="panel-x" data-panel="mixPanel" title="Close">&times;</button>
+    </header>
+    <div class="panel-body">
+      <div id="mixRows"></div>
+
+      <div class="mix-sep"></div>
+      <div class="mix-label">Master</div>
+      <div class="mix-row">
+        <input type="range" id="master" min="0" max="100" step="1" value="90"
+               style="width:100%">
+      </div>
+
+      <div class="mix-sep"></div>
+      <div class="mix-label">Tempo</div>
+      <div class="tempo-row">
+        <input type="range" id="tempo" min="40" max="200" step="2" value="84">
+        <span class="tempo-val" id="tempoVal">84 bpm</span>
+      </div>
+
+      <div class="mix-foot">
+        <button id="mixReset">Reset</button>
+      </div>
+    </div>
+  </section>
+</aside>
 
 </div>
 
@@ -496,6 +592,12 @@
         body: JSON.stringify(request),
       }).then(function (r) { return r.json(); });
     },
+    transpose: function (request) {
+      return fetch("/api/transpose", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(request),
+      }).then(function (r) { return r.json(); });
+    },
     profiles: function () {
       return fetch("/api/profiles").then(function (r) { return r.json(); });
     },
@@ -589,6 +691,52 @@
   var dirty = false;
   function markDirty() { dirty = true; }
 
+
+  /* ---------- popular melodies ----------
+
+     Four, because four is what survived being listened to. An earlier list
+     of thirteen was longer and worse: some of those tunes were my own
+     approximations of a phrase rather than the phrase, and an approximate
+     folk melody is not recognisable, it is just wrong. These are opening
+     phrases whose rhythm really is a run of quarter notes, so what the
+     engine writes - one chord per beat - is the tune and not a flattening
+     of it. That is exactly why Ode to Joy worked first time.
+
+     None of these harmonizations was written by hand. candidates_for knows
+     every chord that can carry a given note in the soprano - it checks the
+     pitch class, the range, and whether any legal voicing actually reaches
+     it - so the progression was chosen from those lists by ordinary
+     functional preference and then put through the solver. What is stored
+     is what came back. They are workable harmonizations rather than the
+     canonical ones; a student should argue with them.
+
+     No figures are preloaded. An earlier version added every embellishment
+     the engine would accept, which was a mistake with a simple test: a
+     Twinkle, Twinkle carrying three suspensions the tune does not have is
+     not Twinkle, Twinkle. A decoration belongs to a melody or it does not,
+     and the engine has no way to know which - so these load as the plain
+     tune, and the embellishment menu is there for whoever wants to add one
+     on purpose. When they do, the soprano box writes the eighth attached to
+     the beat it decorates. */
+  var MELODIES = [
+    { title: "Ode to Joy", source: "Beethoven",
+      key: "C major", prog: "I vi ii V I6 IV I V",
+      soprano: "E5 E5 F5 G5 G5 F5 E5 D5",
+      slots: [] },
+    { title: "Twinkle, Twinkle", source: "traditional",
+      key: "C major", prog: "I IV6 V7 I6 vi IV I",
+      soprano: "C4 C4 G4 G4 A4 A4 G4",
+      slots: [] },
+    { title: "Mary Had a Little Lamb", source: "traditional",
+      key: "C major", prog: "I V6 I V6 I vi I",
+      soprano: "E4 D4 C4 D4 E4 E4 E4",
+      slots: [] },
+    { title: "London Bridge", source: "traditional",
+      key: "C major", prog: "I IV I6 IV I ii I",
+      soprano: "G4 A4 G4 F4 E4 F4 G4",
+      slots: [] },
+  ];
+
   var score = document.getElementById("score");
   var current = null, currentIndex = 0;
 
@@ -651,7 +799,8 @@
     offers.forEach(function (o) { if (o.note) positions.push(dia(o.note)); });
     var highest = Math.max.apply(null, positions);
     var lowest = Math.min.apply(null, positions);
-    var top = Math.min(yOf(TREBLE[4]) - 16, yOf(highest) - STEM - 8);
+    var NAMES_H = 4 * 11 + 8;          // four names, then a gap
+    var top = Math.min(yOf(TREBLE[4]) - 16, yOf(highest) - STEM - 8) - NAMES_H;
     var bottom = Math.max(yOf(BASS[0]) + 16, yOf(lowest) + STEM + 8) + 38;
     var H = bottom - top;
 
@@ -831,12 +980,31 @@
         score.appendChild(spot);
       });
 
-      var label = el("text", { "class": "numeral", x: x, y: bottom - 12 });
+      var label = el("text", { "class": "numeral", x: x, y: bottom - 24 });
       label.textContent = numerals[index];
       score.appendChild(label);
-      var beat = el("text", { "class": "beat", x: x, y: bottom - 28 });
+      var symbols = payload.results[resultIndex].symbols || [];
+      if (symbols[index]) {
+        var sym = el("text", { "class": "symbol", x: x, y: bottom - 10 });
+        sym.textContent = symbols[index];
+        score.appendChild(sym);
+      }
+      var beat = el("text", { "class": "beat", x: x, y: bottom - 40 });
       beat.textContent = index + 1;
       score.appendChild(beat);
+
+      /* Highest first, so the names read down the column the way the
+         noteheads do. Sorted by pitch rather than trusting the voice order:
+         they cannot cross, but the list should be a picture of the staff
+         and not of an assumption about it. */
+      VOICES.map(function (name) { return { name: name, note: chord[name] }; })
+        .sort(function (a, b) { return b.note.midi - a.note.midi; })
+        .forEach(function (entry, row) {
+          var t = el("text", { "class": "voicing", x: x, y: top + 12 + row * 11 });
+          t.setAttribute("fill", "var(--v-" + entry.name + ")");
+          t.textContent = entry.note.name;
+          score.appendChild(t);
+        });
     });
   }
 
@@ -860,6 +1028,31 @@
 
   /* ---------- audio ---------- */
 
+  /* The mixer is playback only. It does not touch the exported file: a MIDI
+     file carries what was written, and muting a part to listen to the others
+     is a thing you do while reading, not an edit to the music. */
+  var MIX_DEFAULT = { volume: 85, mute: false, solo: false };
+  var MIX_MASTER_DEFAULT = 90;
+  var mix = {};
+  VOICES.forEach(function (name) {
+    mix[name] = { volume: MIX_DEFAULT.volume, mute: false, solo: false };
+  });
+  var masterLevel = MIX_MASTER_DEFAULT / 100;
+
+  /* Solo is exclusive by nature rather than by rule: the moment any voice is
+     soloed, every voice that is not becomes silent. That is what makes it
+     the useful control here - soprano and bass together is how you hear
+     whether the outer voices are doing something they should not. */
+  function anySolo() {
+    return VOICES.some(function (n) { return mix[n].solo; });
+  }
+  function voiceLevel(name) {
+    var m = mix[name || "soprano"];
+    if (!m || m.mute) return 0;
+    if (anySolo() && !m.solo) return 0;
+    return (m.volume / 100) * masterLevel;
+  }
+
   var audio = null, master = null;
 
   function ensureAudio() {
@@ -868,17 +1061,18 @@
     if (!AC) return;
     audio = new AC();
     master = audio.createGain();
-    master.gain.value = 0.9;
+    master.gain.value = 1;          // per-note levels carry the mix instead
     master.connect(audio.destination);
   }
 
   var PARTIALS = [[1, 1.0], [2, 0.4], [3, 0.2], [4, 0.1]];
 
-  function strike(midi, at, seconds) {
+  function strike(midi, at, seconds, level) {
     var freq = 440 * Math.pow(2, (midi - 69) / 12);
     var gain = audio.createGain();
     gain.gain.setValueAtTime(0.0001, at);
-    gain.gain.linearRampToValueAtTime(0.10, at + 0.008);
+    gain.gain.linearRampToValueAtTime(0.10 * (level === undefined ? 1 : level),
+                                      at + 0.008);
     gain.gain.exponentialRampToValueAtTime(0.0004, at + seconds * 0.98);
 
     var filter = audio.createBiquadFilter();
@@ -930,13 +1124,13 @@
            file and the speakers tell different stories. */
         var crossed = e.chord !== chord && (e.tied || []).indexOf(name) < 0;
         if (note !== null && (midi !== note || crossed)) {
-          out.push({ from: from, to: at, midi: note });
+          out.push({ from: from, to: at, midi: note, voice: name });
           note = null;
         }
         if (note === null) { note = midi; from = at; chord = e.chord; }
         at += e.beats;
       });
-      if (note !== null) out.push({ from: from, to: at, midi: note });
+      if (note !== null) out.push({ from: from, to: at, midi: note, voice: name });
     });
     return out;
   }
@@ -958,7 +1152,9 @@
     button.textContent = "Stop";
 
     sounding(events).forEach(function (note) {
-      strike(note.midi, start + note.from * beat, (note.to - note.from) * beat);
+      var level = voiceLevel(note.voice);
+      if (level <= 0) return;               // muted, or another voice is soloed
+      strike(note.midi, start + note.from * beat, (note.to - note.from) * beat, level);
     });
 
     /* the column lights up when its chord begins; the weak half belongs to
@@ -1135,7 +1331,44 @@
 
   var choices = [];        // one numeral per melody note
 
-  function melodyText() { return document.getElementById("soprano").value.trim(); }
+  /* The structural melody, with any decoration stripped out.
+
+     An eighth is written attached to the beat it decorates - F5(G5) for one
+     on the weak half, (G5)F5 for one that leans on the strong half - so the
+     token count still matches the progression and the box stays something a
+     writer can edit. The parentheses are display: the engine is given one
+     note per chord, as it always was. */
+  function melodyText() {
+    return document.getElementById("soprano").value
+      .replace(/\([^)]*\)/g, "").replace(/\s+/g, " ").trim();
+  }
+
+  /* Write the decorated tune back into the box.
+
+     Taken from the events the realization returned rather than from the
+     slots that were asked for, so what is written is what is actually
+     sounding: a beat the engine split, with the half the soprano decorates
+     in parentheses on the side of the beat it falls on. */
+  function syncSoprano(payload, index) {
+    var box = document.getElementById("soprano");
+    if (!box.value.trim()) return;
+    var events = (payload.results[index] || {}).events || [];
+    if (!events.length) return;
+    var byChord = {};
+    events.forEach(function (e) { (byChord[e.chord] = byChord[e.chord] || []).push(e); });
+    var out = [];
+    Object.keys(byChord).sort(function (a, b) { return a - b; }).forEach(function (k) {
+      var halves = byChord[k];
+      var first = halves[0].voices.soprano.name;
+      if (halves.length < 2) { out.push(first); return; }
+      var second = halves[1].voices.soprano.name;
+      if (halves[1].decorating.indexOf("soprano") >= 0) out.push(first + "(" + second + ")");
+      else if (halves[0].decorating.indexOf("soprano") >= 0) out.push("(" + first + ")" + second);
+      else out.push(first);        // another voice is the one being decorated
+    });
+    var text = out.join(" ");
+    if (box.value.trim() !== text) box.value = text;
+  }
 
   function renderOptions(payload) {
     var box = document.getElementById("options");
@@ -1319,6 +1552,7 @@
           !Object.keys(chosen).length;
         if (keeping) captureSoprano(payload);
         syncProgression(payload, currentIndex);
+        syncSoprano(payload, currentIndex);
         updateExport();
         var swaps = payload.results[currentIndex].substitutions || [];
         if (swaps.length) {
@@ -1470,12 +1704,23 @@
     buildExport().then(function (url) { if (url) exportLink.click(); });
   });
 
-  /* ---------- the feelings menu ---------- */
+  /* ---------- the side panels ---------- */
   (function () {
     var list = document.getElementById("feelList");
     var confirmBox = document.getElementById("feelConfirm");
     var confirmText = document.getElementById("feelConfirmText");
     var pending = null;
+
+    [].forEach.call(document.querySelectorAll(".panel-x"), function (x) {
+      x.addEventListener("click", function () {
+        var panel = document.getElementById(x.dataset.panel);
+        var closed = panel.hasAttribute("data-closed");
+        if (closed) panel.removeAttribute("data-closed");
+        else panel.setAttribute("data-closed", "");
+        x.innerHTML = closed ? "&times;" : "+";
+        x.title = closed ? "Close" : "Open";
+      });
+    });
 
     function closeAll() {
       [].forEach.call(list.querySelectorAll(".feel-progs[data-open]"),
@@ -1484,30 +1729,34 @@
         function (h) { h.setAttribute("aria-expanded", "false"); });
     }
 
-    function load(pair) {
+    /* One loader for both lists. A feeling brings a progression and no
+       melody; a tune brings a melody, the chords under it and the figures
+       that decorate it. */
+    function load(item) {
       confirmBox.hidden = true;
       pending = null;
-      document.getElementById("key").value = pair[0];
-      document.getElementById("prog").value = pair[1];
-      document.getElementById("soprano").value = "";
+      document.getElementById("key").value = item.key;
+      document.getElementById("prog").value = item.prog;
+      document.getElementById("soprano").value = item.soprano || "";
       document.getElementById("options").innerHTML = "";
       choices = [];
       chosen = {};
+      (item.slots || []).forEach(function (slot) { chosen[slot] = true; });
       keeping = false;
       var keep = document.getElementById("keep");
       keep.classList.remove("on");
       keep.textContent = "Keep soprano";
-      /* Loading a progression is not the writer's own work, so the next
-         thing they do is what makes this dirty again - not this. */
+      /* Loading something is not the writer's own work, so the next thing
+         they do is what makes this dirty again - not this. */
       dirty = false;
       realize();
     }
 
-    function choose(pair) {
-      if (!dirty) return load(pair);
-      pending = pair;
+    function choose(item) {
+      if (!dirty) return load(item);
+      pending = item;
       confirmText.textContent = "Replace what you are working on with " +
-        pair[1] + " in " + pair[0] + "?";
+        (item.title || item.prog) + " in " + item.key + "?";
       confirmBox.hidden = false;
     }
 
@@ -1552,7 +1801,9 @@
         where.className = "key";
         where.textContent = pair[0];
         pick.appendChild(where);
-        pick.addEventListener("click", function () { choose(pair); });
+        pick.addEventListener("click", function () {
+          choose({ key: pair[0], prog: pair[1] });
+        });
         body.appendChild(pick);
       });
 
@@ -1567,6 +1818,91 @@
 
       list.appendChild(head);
       list.appendChild(body);
+    });
+
+    var tunes = document.getElementById("tuneList");
+    MELODIES.forEach(function (tune) {
+      var item = document.createElement("button");
+      item.type = "button";
+      item.className = "tune";
+      item.appendChild(document.createTextNode(tune.title));
+      var src = document.createElement("span");
+      src.className = "src";
+      src.textContent = tune.source + "  ·  " + tune.key;
+      item.appendChild(src);
+      var how = document.createElement("span");
+      how.className = "how";
+      how.textContent = tune.prog;
+      item.appendChild(how);
+      item.addEventListener("click", function () { choose(tune); });
+      tunes.appendChild(item);
+    });
+  })();
+
+  /* ---------- the mixer ---------- */
+  (function () {
+    var rows = document.getElementById("mixRows");
+    var master = document.getElementById("master");
+
+    VOICES.forEach(function (name) {
+      var row = document.createElement("div");
+      row.className = "mix-row";
+      row.style.setProperty("--tone", "var(--v-" + name + ")");
+
+      var who = document.createElement("span");
+      who.className = "who";
+      who.textContent = name.slice(0, 4);
+      row.appendChild(who);
+
+      var slider = document.createElement("input");
+      slider.type = "range";
+      slider.min = 0; slider.max = 100; slider.step = 1;
+      slider.value = mix[name].volume;
+      slider.title = name + " volume";
+      slider.addEventListener("input", function () {
+        mix[name].volume = +slider.value;
+      });
+      row.appendChild(slider);
+
+      ["mute", "solo"].forEach(function (which) {
+        var b = document.createElement("button");
+        b.type = "button";
+        b.className = "mix-btn " + which;
+        b.textContent = which === "mute" ? "M" : "S";
+        b.title = which + " " + name;
+        b.addEventListener("click", function () {
+          mix[name][which] = !mix[name][which];
+          b.classList.toggle("on", mix[name][which]);
+        });
+        row.appendChild(b);
+      });
+
+      row.dataset.voice = name;
+      rows.appendChild(row);
+    });
+
+    master.addEventListener("input", function () {
+      masterLevel = +master.value / 100;
+    });
+
+    document.getElementById("mixReset").addEventListener("click", function () {
+      VOICES.forEach(function (name) {
+        mix[name].volume = MIX_DEFAULT.volume;
+        mix[name].mute = false;
+        mix[name].solo = false;
+      });
+      masterLevel = MIX_MASTER_DEFAULT / 100;
+      master.value = MIX_MASTER_DEFAULT;
+      [].forEach.call(rows.querySelectorAll(".mix-row"), function (row) {
+        row.querySelector("input[type=range]").value = MIX_DEFAULT.volume;
+        [].forEach.call(row.querySelectorAll(".mix-btn"), function (b) {
+          b.classList.remove("on");
+        });
+      });
+      /* Tempo is a mixer control now, so Reset means it too. */
+      var tempo = document.getElementById("tempo");
+      tempo.value = 84;
+      tempo.dispatchEvent(new Event("input"));
     });
   })();
 
@@ -1588,9 +1924,31 @@
   sopranoBox.addEventListener("keydown", function (e) {
     if (e.key === "Enter") refreshMelody();
   });
+  /* A new key changes which chords can carry the melody - and, if there is
+     a melody, it should be the same tune in the new key rather than the old
+     notes stranded in it. The engine moves it by scale degree: mi stays mi,
+     which is what makes C major to C minor lower the third instead of
+     leaving an E where the key has E-flat.
+
+     Any figures already chosen go. A slot names the pitch it decorates, and
+     after a transposition those pitches are not there any more. */
+  var lastKey = keySelect.value;
   keySelect.addEventListener("change", function () {
-    /* a new key changes which chords can carry the melody */
-    if (melodyText()) refreshMelody(); else if (current) realize();
+    var from = lastKey, to = keySelect.value;
+    lastKey = to;
+    var melody = melodyText();
+    if (!melody) { if (current) realize(); return; }
+    chosen = {};
+    setBusy(true);
+    backend.transpose({ from: from, to: to, soprano: melody, profile: PROFILE })
+      .then(function (answer) {
+        setBusy(false);
+        if (answer && answer.ok && answer.soprano) {
+          document.getElementById("soprano").value = answer.soprano;
+        }
+        refreshMelody();
+      })
+      .catch(function () { setBusy(false); refreshMelody(); });
   });
 
   /* A stale server is otherwise invisible: the page reloads fine while the

@@ -77,7 +77,8 @@ window.HARMONY_SOURCES = %(sources)s;
     py.runPython([
       "import sys, json, base64",
       "sys.path.insert(0, '/app')",
-      "from harmony.web.server import realize_payload, candidates_payload, midi_for",
+      "from harmony.web.server import realize_payload, candidates_payload",
+      "from harmony.web.server import midi_for, transpose_payload",
       "from harmony.core.rules.registry import PROFILE_DIR",
       "",
       "def _realize(raw):",
@@ -96,6 +97,12 @@ window.HARMONY_SOURCES = %(sources)s;
       "def _candidates(raw):",
       "    try:",
       "        return json.dumps(candidates_payload(json.loads(raw)))",
+      "    except Exception as exc:",
+      "        return json.dumps({'ok': False, 'error': str(exc)})",
+      "",
+      "def _transpose(raw):",
+      "    try:",
+      "        return json.dumps(transpose_payload(json.loads(raw)))",
       "    except Exception as exc:",
       "        return json.dumps({'ok': False, 'error': str(exc)})",
       "",
@@ -135,6 +142,7 @@ window.HARMONY_SOURCES = %(sources)s;
     deferred: true,
     realize: function (request) { return call("_realize", request); },
     candidates: function (request) { return call("_candidates", request); },
+    transpose: function (request) { return call("_transpose", request); },
     profiles: function () {
       return ready.then(function (py) {
         return JSON.parse(py.runPython("_profiles()"));

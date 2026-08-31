@@ -73,6 +73,54 @@ def _function_of(spec: ChordSpec) -> str:
     return "other"
 
 
+def transpose(melody: list[Pitch | None], from_key: Key, to_key: Key,
+              low: Pitch | None = None, high: Pitch | None = None
+              ) -> list[Pitch | None]:
+    """The same tune on the same scale degrees of a different key.
+
+    Solfege, not semitones. Mi in C major is E; mi in G major is B; and in C
+    minor it is E-flat, because what is being kept is the degree and what
+    spells it is the mode. Transposing by interval instead would carry C
+    major's E straight into C minor and hand back a melody the key does not
+    contain.
+
+    An accidental keeps its distance from the scale rather than its letter,
+    so a raised seventh stays a raised seventh: it is written against the new
+    key's signature, not copied across from the old one's.
+
+    The whole line then moves by octaves until it sits in the soprano's
+    range. Degrees are preserved by octave, so this changes nothing about
+    which notes they are - and if no octave fits, the untransposed octave is
+    handed back rather than a silently mangled one, because a melody that
+    cannot be sung in the new key is a fact for the caller to see.
+    """
+    from_sig, to_sig = from_key.signature(), to_key.signature()
+    moved: list[Pitch | None] = []
+    for pitch in melody:
+        if pitch is None:
+            moved.append(None)
+            continue
+        # distance from the tonic in letter-steps, which is the degree
+        steps = pitch.diatonic_index - from_key.tonic.letter
+        index = to_key.tonic.letter + steps
+        letter = index % 7
+        away = pitch.alteration - from_sig[pitch.letter]
+        moved.append(Pitch(letter, index // 7, to_sig[letter] + away))
+
+    if low is None or high is None:
+        return moved
+    real = [p for p in moved if p is not None]
+    if not real:
+        return moved
+    for shift in (0, -1, 1, -2, 2):
+        candidate = [None if p is None else Pitch(p.letter, p.octave + shift, p.alteration)
+                     for p in moved]
+        inside = [p for p in candidate if p is not None]
+        if all(low.midi <= p.midi <= high.midi for p in inside):
+            return candidate
+    return moved
+
+
 def parse_soprano(text: str) -> list[Pitch | None]:
     """Pitches, with ``_`` standing for a note the engine may choose.
 
