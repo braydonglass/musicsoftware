@@ -21,8 +21,8 @@ from ..core.checker import check, errors_only, explained_breaks
 from ..core.embellish import apply as place_figures
 from ..core.embellish import opportunities
 from ..core.key import Key
-from ..core.melody import (HOLE, candidates_for, parse_soprano, transpose,
-                           vocabulary_for)
+from ..core.melody import (HOLE, candidates_for, parse_soprano, suggest,
+                           transpose, vocabulary_for)
 from ..core.midi import to_bytes as midi_bytes
 from ..core.roman import RomanNumeralError, parse_progression
 from ..core.roman import parse as parse_roman
@@ -79,15 +79,20 @@ def candidates_payload(request: dict) -> dict:
         except (RomanNumeralError, ValueError):
             continue
         vocabulary.append(token)
+    notes = [
+        {"note": str(note) if note is not None else HOLE,
+         "free": note is None,
+         "options": (candidates_for(note, key, profile, vocabulary)
+                     if note is not None else [])}
+        for note in melody
+    ]
+    # One chord per note, chosen across the phrase rather than one note at a
+    # time - see suggest(). The page uses it wherever nothing is written.
     return {
         "ok": True,
-        "notes": [
-            {"note": str(note) if note is not None else HOLE,
-             "free": note is None,
-             "options": (candidates_for(note, key, profile, vocabulary)
-                         if note is not None else [])}
-            for note in melody
-        ],
+        "suggested": suggest([[o["numeral"] for o in n["options"]] for n in notes],
+                             key),
+        "notes": notes,
     }
 
 

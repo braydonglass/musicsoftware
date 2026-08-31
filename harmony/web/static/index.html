@@ -124,6 +124,14 @@
   .prog-pick:hover { color: var(--ink); border-color: var(--tone); }
   .prog-pick .key { color: var(--tone); font-size: 10px; display: block; margin-top: 2px; }
 
+  .ask {
+    margin-top: 8px; max-width: 190px;
+    border: 1px solid var(--amber-dim); background: #1C1811; border-radius: 3px;
+    padding: 9px; font-size: 11px; line-height: 1.5; color: var(--ink);
+  }
+  .ask .row { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+  .ask button { font-size: 10px; padding: 6px 9px; }
+
   /* Asked before anything is thrown away, never after. */
   .feel-confirm {
     border: 1px solid var(--amber-dim); background: #1C1811; border-radius: 3px;
@@ -414,6 +422,13 @@
     <div class="field">
       <label for="key">Key</label>
       <select id="key"></select>
+      <div class="ask" id="keyAsk" hidden>
+        <span id="keyAskText"></span>
+        <div class="row">
+          <button id="keyYes" class="primary">Transcribe</button>
+          <button id="keyNo">Keep the notes</button>
+        </div>
+      </div>
     </div>
 
     <div class="field grow">
@@ -1455,7 +1470,9 @@
       })
       .then(function (payload) {
         setBusy(false);
-        if (!payload.ok) { box.innerHTML = ""; setStatus(payload.error, "err"); return; }
+        if (!payload.ok) {
+          box.innerHTML = ""; setStatus(payload.error, "err"); return false;
+        }
         /* Keep whatever the progression box already says when it lines up,
            otherwise start each note on its first workable chord so there is
            something to hear before any clicking happens. */
@@ -1474,15 +1491,36 @@
           if (typed[i] && options.indexOf(typed[i]) >= 0) return typed[i];
           /* a hole offers nothing, so whatever is already written stands */
           if (entry.free) return typed[i] || "";
+          /* Otherwise the engine's suggestion, which was chosen by reading
+             the whole phrase. Taking each note's first workable chord
+             instead gives a line that goes nowhere and often will not
+             realize, because whether two chords connect is not a fact about
+             either of them alone. */
+          var offered = (payload.suggested || [])[i];
+          if (offered && options.indexOf(offered) >= 0) return offered;
           return options[0] || "";
         });
+        /* A note no chord in the key can carry leaves an empty slot, and
+           joining those into a progression quietly drops them: four notes
+           become two chords and the mismatch shows up later as something
+           that reads like an engine fault. Say which note it is instead,
+           and leave the progression alone. */
+        var orphans = payload.notes.filter(function (entry, i) {
+          return !entry.free && !choices[i];
+        }).map(function (entry) { return entry.note; });
+        renderOptions(payload);
+        if (orphans.length) {
+          setStatus("nothing in " + document.getElementById("key").value +
+                    " can carry " + orphans.join(", ") +
+                    " - change the note, or the key", "err");
+          return false;
+        }
         /* Never shrink the progression to fit the melody. A melody shorter
            than the progression is the whole point of holding one: the extra
            chord is exactly what the engine has been left to answer. */
         if (!typed.length || choices.length === typed.length) {
           document.getElementById("prog").value = choices.join(" ");
         }
-        renderOptions(payload);
       })
       .catch(function () { setBusy(false); box.innerHTML = ""; });
   }
@@ -1968,7 +2006,9 @@
   });
 
   var sopranoBox = document.getElementById("soprano");
-  function refreshMelody() { loadOptions().then(function () { realize(); }); }
+  function refreshMelody() {
+    loadOptions().then(function (ok) { if (ok !== false) realize(); });
+  }
   sopranoBox.addEventListener("change", function () { markDirty(); refreshMelody(); });
   sopranoBox.addEventListener("keydown", function (e) {
     if (e.key === "Enter") refreshMelody();
@@ -1982,14 +2022,17 @@
      Any figures already chosen go. A slot names the pitch it decorates, and
      after a transposition those pitches are not there any more. */
   var lastKey = keySelect.value;
-  keySelect.addEventListener("change", function () {
-    var from = lastKey, to = keySelect.value;
-    lastKey = to;
-    var melody = melodyText();
-    if (!melody) { if (current) realize(); return; }
+  var keyAsk = document.getElementById("keyAsk");
+
+  function isMinor(name) { return name.indexOf("minor") >= 0; }
+
+  /* Move the melody to the new key by scale degree. Mi stays mi, so this is
+     what lowers the third going into a minor key. */
+  function moveMelody(from, to) {
     chosen = {};
     setBusy(true);
-    backend.transpose({ from: from, to: to, soprano: melody, profile: PROFILE })
+    return backend.transpose({ from: from, to: to, soprano: melodyText(),
+                               profile: PROFILE })
       .then(function (answer) {
         setBusy(false);
         if (answer && answer.ok && answer.soprano) {
@@ -1998,6 +2041,43 @@
         refreshMelody();
       })
       .catch(function () { setBusy(false); refreshMelody(); });
+  }
+
+  /* Going from major into minor is the one change that is not just a move.
+     Keeping the degrees rewrites the tune - Ode to Joy in minor is a
+     different piece, not the same piece somewhere else - so it is asked
+     rather than assumed. Every other change of key is a move and is made
+     without asking: minor to minor keeps the same degrees of a new tonic,
+     and major to major has no third to lower.
+
+     Keep the notes leaves the melody exactly as written. The notes that
+     fall outside the new key then have no chord that can carry them, which
+     the page says plainly rather than papering over. */
+  keySelect.addEventListener("change", function () {
+    var from = lastKey, to = keySelect.value;
+    lastKey = to;
+    keyAsk.hidden = true;
+    if (!melodyText()) { if (current) realize(); return; }
+    if (isMinor(to) && !isMinor(from)) {
+      document.getElementById("keyAskText").textContent =
+        "Transcribe the melody into " + to + "? Keeping the degrees lowers " +
+        "the third and changes the tune.";
+      keyAsk.dataset.from = from;
+      keyAsk.dataset.to = to;
+      keyAsk.hidden = false;
+      return;
+    }
+    moveMelody(from, to);
+  });
+
+  document.getElementById("keyYes").addEventListener("click", function () {
+    keyAsk.hidden = true;
+    moveMelody(keyAsk.dataset.from, keyAsk.dataset.to);
+  });
+  document.getElementById("keyNo").addEventListener("click", function () {
+    keyAsk.hidden = true;
+    chosen = {};
+    refreshMelody();
   });
 
   /* A stale server is otherwise invisible: the page reloads fine while the
