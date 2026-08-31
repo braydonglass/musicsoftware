@@ -1252,13 +1252,13 @@
          tenor, tenor to bass, which are the pairs an ear actually hears as
          intervals - and neighbouring in time along each voice. */
       if (showIntervals) {
-        /* Neighbours on the right, everything else on the left.
-           Soprano-alto, alto-tenor and tenor-bass are the pairs the ear
-           picks out first, so they sit close to the chord. The three that
-           skip a voice - soprano to tenor, alto to bass, and the outer pair
-           - are the ones that decide whether the spacing is open or closed
-           and where a hidden fifth comes from, so they get their own side
-           rather than crowding the same one. */
+        /* Neighbouring voices only: soprano to alto, alto to tenor, tenor
+           to bass. The pairs that skip a voice were drawn too, on the other
+           side, and six intervals a chord turned the staff into a thicket -
+           everything labelled and nothing readable. Three is what an ear
+           picks out anyway, and the outer-voice pair, which is the one
+           worth adding back if any is, has its own reading in the position
+           brace underneath. */
         for (var vi = 0; vi < VOICES.length - 1; vi++) {
           var hi = chord[VOICES[vi]], lo = chord[VOICES[vi + 1]];
           var yHi = yOf(dia(hi)), yLo = yOf(dia(lo));
@@ -1268,16 +1268,6 @@
           name.textContent = namedInterval(lo, hi);
           score.appendChild(name);
         }
-        [[0, 2], [1, 3], [0, 3]].forEach(function (pair, depth) {
-          var hi = chord[VOICES[pair[0]]], lo = chord[VOICES[pair[1]]];
-          var yHi = yOf(dia(hi)), yLo = yOf(dia(lo));
-          var at = x - 20 - depth * 13;
-          score.appendChild(line(at, yHi, at, yLo, "ivl-line"));
-          var name = el("text", { "class": "ivl-label", x: at - 1,
-                                  y: (yHi + yLo) / 2 + 3 });
-          name.textContent = namedInterval(lo, hi);
-          score.appendChild(name);
-        });
         if (index + 1 < chords.length) {
           var nextX = LEFT + CLEF_W + sigCount * sigW + (index + 1) * COL_W + COL_W / 2;
           VOICES.forEach(function (name) {
