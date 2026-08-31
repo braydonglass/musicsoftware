@@ -9,7 +9,7 @@ partly pinned.
 import unittest
 
 from harmony.core.key import Key
-from harmony.core.melody import parse_soprano
+from harmony.core.melody import parse_soprano, transpose
 from harmony.core.roman import parse_progression
 from harmony.core.rules.registry import Profile
 from harmony.core.solver import NoRealization, solve
@@ -189,3 +189,89 @@ class ChoosingChordsAcrossThePhrase(unittest.TestCase):
         payload = candidates_payload({"key": "c minor", "soprano": "E5 F5 G5"})
         self.assertEqual(len(payload["suggested"]), 3)
         self.assertEqual(payload["suggested"][0], "")
+
+
+class TheSuggestionCanActuallyBePlayed(unittest.TestCase):
+    """A chord per note is not a progression, twice over.
+
+    Each chord offered lies on some complete path. Picking the best one
+    note at a time can still step off all of them, and filtering afterwards
+    does not save it: the beam fills with high-scoring lines that cannot be
+    played and prunes away the ones that can. Twinkle in D minor came back
+    i iv V i iv vii°7 i, where iv to V has no legal pair of voicings at all.
+    """
+
+    TUNES = ["E5 E5 F5 G5 G5 F5 E5 D5", "C4 C4 G4 G4 A4 A4 G4",
+             "E4 D4 C4 D4 E4 E4 E4", "G4 A4 G4 F4 E4 F4 G4",
+             "C4 D4 E4 C4 C4 D4 E4 C4", "C5 C5 C5 G4 A4 A4 G4",
+             "G4 E4 G4 G4 E4 G4", "C4 C4 C4 D4 E4 D4 C4 E4",
+             "G4 E4 E4 F4 D4 D4 C4 D4 E4 F4 G4", "G4 C5 C5 C5 B4 C5 D5 C5"]
+    KEYS = ["C major", "G major", "F major", "Eb major", "A major",
+            "a minor", "d minor", "c minor", "e minor", "bb minor", "f# minor"]
+
+    def test_every_tune_in_every_key_gets_a_playable_suggestion(self):
+        profile = Profile.load("strict")
+        low, high = profile.ranges["soprano"]
+        home = Key.parse("C major")
+        for tune in self.TUNES:
+            for key_text in self.KEYS:
+                with self.subTest(tune=tune, key=key_text):
+                    key = Key.parse(key_text)
+                    melody = transpose(parse_soprano(tune), home, key, low, high)
+                    text = " ".join(str(p) for p in melody)
+                    suggested = candidates_payload({"key": key_text, "soprano": text})["suggested"]
+                    self.assertEqual(len(suggested), len(melody))
+                    # the point: it realizes, not merely that it exists
+                    solve(parse_progression(" ".join(suggested), key), key,
+                          profile, soprano=melody)
+
+    def test_a_long_tune_gets_the_wider_search_it_needs(self):
+        """Eleven notes of Lightly Row in C minor need the second pass.
+
+        The narrow beam produces nothing playable for it. Widening only when
+        the narrow one fails is what keeps the seven-note tunes cheap, so
+        the widening has to actually happen when it is needed.
+        """
+        key = Key.parse("c minor")
+        profile = Profile.load("strict")
+        low, high = profile.ranges["soprano"]
+        melody = transpose(
+            parse_soprano("G4 E4 E4 F4 D4 D4 C4 D4 E4 F4 G4"),
+            Key.parse("C major"), key, low, high)
+        text = " ".join(str(p) for p in melody)
+        suggested = candidates_payload({"key": "c minor", "soprano": text})["suggested"]
+        solve(parse_progression(" ".join(suggested), key), key, profile,
+              soprano=melody)
+
+
+class TransposingMovesTheTuneAsLittleAsItCan(unittest.TestCase):
+    """It used to take the first octave that fitted, which is not the same.
+
+    C major to G and back returned E4 where E5 went out, because E4 is in
+    the soprano's range and the search stopped at the first thing that was.
+    That also parks the tune at the bottom of the range, where the three
+    voices underneath have the least room.
+    """
+
+    def test_it_picks_the_nearest_octave_that_fits(self):
+        profile = Profile.load("strict")
+        low, high = profile.ranges["soprano"]
+        g, c = Key.parse("G major"), Key.parse("C major")
+        # B4-ish in G is mi; mi in C is E, and E5 is nearer to it than E4
+        moved = transpose(parse_soprano("B4 B4 C5 D5 D5 C5 B4 A4"),
+                                g, c, low, high)
+        self.assertEqual(" ".join(str(p) for p in moved),
+                         "E5 E5 F5 G5 G5 F5 E5 D5")
+
+    def test_it_never_leaves_the_range(self):
+        profile = Profile.load("strict")
+        low, high = profile.ranges["soprano"]
+        home = Key.parse("C major")
+        for key_text in ["C major", "F# major", "Gb major", "d# minor",
+                         "bb minor", "B major", "Db major"]:
+            with self.subTest(key=key_text):
+                moved = transpose(parse_soprano("E5 E5 F5 G5 G5 F5 E5 D5"),
+                                        home, Key.parse(key_text), low, high)
+                for p in moved:
+                    self.assertLessEqual(low.midi, p.midi, f"{p} below {low}")
+                    self.assertLessEqual(p.midi, high.midi, f"{p} above {high}")

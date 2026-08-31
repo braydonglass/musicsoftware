@@ -101,7 +101,7 @@ def candidates_payload(request: dict) -> dict:
     return {
         "ok": True,
         "suggested": suggest([[o["numeral"] for o in n["options"]] for n in notes],
-                             key),
+                             key, melody, profile),
         "notes": notes,
     }
 
@@ -312,6 +312,13 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(200, work(request))
             except (RomanNumeralError, ValueError, FileNotFoundError) as exc:
                 self._json(200, {"ok": False, "error": str(exc)})
+            except Exception as exc:                  # pragma: no cover
+                # The same fallback /api/realize has. Without it these two
+                # answered a bad request by raising out of the handler:
+                # a logged traceback, a broken connection and no reply at
+                # all, where the third endpoint returns a message. A
+                # soprano that is null rather than a string was enough.
+                self._json(500, {"ok": False, "error": f"unexpected: {exc}"})
             return
 
         try:

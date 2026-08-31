@@ -117,6 +117,54 @@ DOMINANT = ("V", "V6", "V7", "V65", "vii°6", "vii°7")
 BEAM = 40
 
 
+def _layers(options, melody, key, profile):
+    """Every (chord, spec, voicing) the melody allows, note by note."""
+    out = []
+    for index, note in enumerate(melody):
+        here = []
+        for token in options[index]:
+            try:
+                spec = parse(token, key)
+            except (RomanNumeralError, ValueError):
+                continue
+            for voicing, _ in generate(spec, key, profile, soprano=note):
+                here.append((token, spec, voicing))
+        out.append(here)
+    return out
+
+
+def _reaches(layers, key, profile, rules):
+    """Trim to the voicings that lie on a complete path, or None if none do.
+
+    Forward for what can be reached, backward for what can still reach the
+    end. On a chain that is exact: a voicing survives precisely when some
+    whole path runs through it.
+    """
+    def passes(index, left, right):
+        ctx = TransitionContext(a=left[2], b=right[2], spec_a=left[1],
+                                spec_b=right[1], key=key, index=index,
+                                profile=profile)
+        _, cost = evaluate_transition(ctx, rules)
+        return not math.isinf(cost)
+
+    if not layers or any(not layer for layer in layers):
+        return None
+    alive = [list(layers[0])]
+    for index in range(1, len(layers)):
+        previous = alive[-1]
+        alive.append([n for n in layers[index]
+                      if any(passes(index - 1, before, n) for before in previous)])
+        if not alive[-1]:
+            return None
+    for index in range(len(alive) - 2, -1, -1):
+        after = alive[index + 1]
+        alive[index] = [n for n in alive[index]
+                        if any(passes(index, n, later) for later in after)]
+        if not alive[index]:
+            return None
+    return alive
+
+
 def workable(options: list[list[str]], melody: list[Pitch | None],
              key: Key, profile: Profile) -> list[list[str]]:
     """Prune each note's chords to the ones that can actually be used.
@@ -124,74 +172,32 @@ def workable(options: list[list[str]], melody: list[Pitch | None],
     candidates_for answers whether a chord can carry a note. It cannot
     answer whether that chord can be reached from the one before it or left
     for the one after, because that is not a fact about either chord alone -
-    so the list it returns contains chords that produce an error the moment
-    they are clicked.
+    so the list it returns contains chords that error the moment they are
+    clicked.
 
-    A progression is a chain, and on a chain pairwise consistency is not an
-    approximation. Prune any chord with no partner in a neighbour, repeat
-    until nothing changes, and what survives is exactly the set of chords
-    that appear in at least one progression the transition rules allow: an
-    arc-consistent tree has a solution, and every value left in a domain
-    belongs to one of them.
+    Asked of voicings rather than of chords, which is what makes it exact.
+    Two chords having some legal pair between them is not enough: the
+    voicing that lets a chord in from the left need not be one that lets it
+    out to the right.
 
-    Only the transition rules are consulted, and only between neighbours.
-    Whether the whole thing then realizes is still the solver's to say -
-    it weighs costs, three-chord context and re-voicing, none of which are
-    pairwise. This removes what certainly cannot work, not everything that
-    might not.
+    What this does not promise, and cannot: that any *combination* of the
+    survivors works. Each is on some complete path; picking one per note can
+    still take a step off all of them. That is suggest()'s problem.
     """
     rules = profile.rules("transition")
-    specs: list[dict[str, ChordSpec]] = []
-    voicings: list[dict[str, list]] = []
-    for index, note in enumerate(melody):
-        here_specs, here_voicings = {}, {}
-        for token in options[index]:
-            try:
-                spec = parse(token, key)
-            except (RomanNumeralError, ValueError):
-                continue
-            found = generate(spec, key, profile, soprano=note)
-            if not found:
-                continue
-            here_specs[token] = spec
-            here_voicings[token] = [v for v, _ in found]
-        specs.append(here_specs)
-        voicings.append(here_voicings)
-
-    domains = [list(d.keys()) for d in specs]
-
-    def joins(index: int, left: str, right: str) -> bool:
-        """Is there any pair of voicings the rules will let through?"""
-        for a in voicings[index][left]:
-            for b in voicings[index + 1][right]:
-                ctx = TransitionContext(a=a, b=b, spec_a=specs[index][left],
-                                        spec_b=specs[index + 1][right],
-                                        key=key, index=index, profile=profile)
-                _, cost = evaluate_transition(ctx, rules)
-                if not math.isinf(cost):
-                    return True
-        return False
-
-    changed = True
-    while changed:
-        changed = False
-        for index in range(len(domains) - 1):
-            kept = [c for c in domains[index]
-                    if any(joins(index, c, n) for n in domains[index + 1])]
-            if len(kept) != len(domains[index]):
-                domains[index] = kept
-                changed = True
-            kept = [n for n in domains[index + 1]
-                    if any(joins(index, c, n) for c in domains[index])]
-            if len(kept) != len(domains[index + 1]):
-                domains[index + 1] = kept
-                changed = True
-    # A note pruned to nothing is worse than a note offering something that
-    # will not work: it leaves no button at all. Keep what was there.
-    return [kept or options[i] for i, kept in enumerate(domains)]
+    alive = _reaches(_layers(options, melody, key, profile), key, profile, rules)
+    if alive is None:
+        return options
+    kept = []
+    for index, layer in enumerate(alive):
+        survivors = {token for token, _, _ in layer}
+        kept.append([c for c in options[index] if c in survivors] or options[index])
+    return kept
 
 
-def suggest(options: list[list[str]], key: Key) -> list[str]:
+def suggest(options: list[list[str]], key: Key,
+            melody: list[Pitch | None] | None = None,
+            profile: Profile | None = None) -> list[str]:
     """Choose one chord per note, reading the melody as a phrase.
 
     Picking each note's first workable chord independently is what produces
@@ -208,44 +214,115 @@ def suggest(options: list[list[str]], key: Key) -> list[str]:
     """
     if not options or any(not choices for choices in options):
         return [choices[0] if choices else "" for choices in options]
-    root, first_inversion = TONIC[key.mode]
-    beam = [([c], 10 if c == root else 6 if c == first_inversion else 0)
-            for c in options[0]]
-    for position in range(1, len(options)):
-        last = position == len(options) - 1
-        reachable = any(c in TONIC[key.mode] for c in options[position])
-        nxt = []
-        for sequence, score in beam:
-            for chord in options[position]:
-                value = score + GOES_TO.get(sequence[-1], {}).get(chord, 0)
-                if chord == sequence[-1]:
-                    value -= 1
-                    if len(sequence) > 1 and sequence[-2] == chord:
-                        value -= 4
-                if "\u00b0" in chord:
-                    # A diminished chord is every-note-a-tendency-tone, which
-                    # leaves the fewest ways in and out of it: chosen as a
-                    # default it is the one most likely to be a chord the
-                    # solver then cannot connect. Wanted where the melody
-                    # asks for it, not where anything else would do.
-                    value -= 3
-                if last:
-                    if reachable and chord in TONIC[key.mode]:
-                        value += 8
-                        if chord == root:
-                            value += 4
-                        if sequence[-1] in DOMINANT:
+
+    # Which chord can follow which at all, worked out once before the search
+    # rather than checked after it.
+    #
+    # Filtering afterwards does not work. The beam fills with high-scoring
+    # lines that cannot be played and prunes away the ones that can: the
+    # sequences that hold together for Twinkle in D minor sit on the tonic
+    # for four beats, and the repetition penalty buries them long before
+    # anything asks whether they are playable. A search that cannot see the
+    # constraint optimises its way past the answer.
+    cells, joinable, rules = {}, {}, None
+    if melody is not None and profile is not None:
+        rules = profile.rules("transition")
+        for index, note in enumerate(melody):
+            for token in options[index]:
+                try:
+                    spec = parse(token, key)
+                except (RomanNumeralError, ValueError):
+                    continue
+                cells[(index, token)] = [(token, spec, v) for v, _
+                                         in generate(spec, key, profile, soprano=note)]
+        for index in range(len(options) - 1):
+            for left in options[index]:
+                for right in options[index + 1]:
+                    joinable[(index, left, right)] = any(
+                        not math.isinf(evaluate_transition(
+                            TransitionContext(a=x[2], b=y[2], spec_a=x[1],
+                                              spec_b=y[1], key=key, index=index,
+                                              profile=profile), rules)[1])
+                        for x in cells.get((index, left), [])
+                        for y in cells.get((index + 1, right), []))
+
+    def can_follow(index, left, right):
+        return joinable.get((index, left, right), True)
+
+    def search(width):
+        """The beam at a given width, best first."""
+        root, first_inversion = TONIC[key.mode]
+        beam = [([c], 10 if c == root else 6 if c == first_inversion else 0)
+                for c in options[0]]
+        for position in range(1, len(options)):
+            last = position == len(options) - 1
+            reachable = any(c in TONIC[key.mode] for c in options[position])
+            nxt = []
+            for sequence, score in beam:
+                for chord in options[position]:
+                    if not can_follow(position - 1, sequence[-1], chord):
+                        continue
+                    value = score + GOES_TO.get(sequence[-1], {}).get(chord, 0)
+                    if chord == sequence[-1]:
+                        value -= 1
+                        if len(sequence) > 1 and sequence[-2] == chord:
+                            value -= 4
+                    if "\u00b0" in chord:
+                        # Every note of a diminished chord is a tendency
+                        # tone, so it has the fewest ways in and out and is
+                        # the likeliest default the solver then refuses.
+                        # Wanted where the melody asks for it, not where
+                        # anything else would do.
+                        value -= 3
+                    if last:
+                        if reachable and chord in TONIC[key.mode]:
                             value += 8
-                    elif not reachable and chord in ("V", "V6", "V7"):
-                        # the tune ends where no tonic reaches, so the phrase
-                        # is asking for a half cadence
-                        value += 10
-                        if chord == "V":
-                            value += 4
-                nxt.append((sequence + [chord], value))
-        nxt.sort(key=lambda pair: -pair[1])
-        beam = nxt[:BEAM]
-    return beam[0][0]
+                            if chord == root:
+                                value += 4
+                            if sequence[-1] in DOMINANT:
+                                value += 8
+                        elif not reachable and chord in ("V", "V6", "V7"):
+                            # the tune ends where no tonic reaches, so the
+                            # phrase is asking for a half cadence
+                            value += 10
+                            if chord == "V":
+                                value += 4
+                    nxt.append((sequence + [chord], value))
+            nxt.sort(key=lambda pair: -pair[1])
+            if not nxt:
+                # Nothing can follow anything here. Step without the
+                # constraint rather than return nothing, and let the solver
+                # name the fault.
+                nxt = sorted([(seq + [c], sc) for seq, sc in beam
+                              for c in options[position]], key=lambda pair: -pair[1])
+            beam = nxt[:width]
+        return beam
+
+    if melody is None or profile is None:
+        return search(BEAM)[0][0]
+
+    # The best-scoring line whose chords can actually be joined.
+    #
+    # Pairwise feasibility gets most of the way there and is not the whole
+    # story: a step that is legal on its own can still leave nowhere to go
+    # three chords later. So each candidate is swept forward and backward
+    # through the same trellis, which is exact and costs no search, and the
+    # first that survives is the answer.
+    #
+    # Widening only when the narrow beam fails. Eleven notes of Lightly Row
+    # in C minor need four hundred candidates before one holds together;
+    # seven notes of Twinkle need none of that, and should not pay for it.
+    best = None
+    for width in (BEAM, BEAM * 10):
+        beam = search(width)
+        if best is None and beam:
+            best = beam[0][0]
+        for sequence, _ in beam:
+            layers = [cells.get((index, token), [])
+                      for index, token in enumerate(sequence)]
+            if _reaches(layers, key, profile, rules) is not None:
+                return sequence
+    return best
 
 
 def transpose(melody: list[Pitch | None], from_key: Key, to_key: Key,
@@ -287,13 +364,33 @@ def transpose(melody: list[Pitch | None], from_key: Key, to_key: Key,
     real = [p for p in moved if p is not None]
     if not real:
         return moved
+
+    # Of the octaves that fit, take the one that moves the tune least.
+    #
+    # Taking the first that fitted instead meant every change of key could
+    # drop the melody an octave and leave it there: C major to G and back
+    # returned E4 where E5 went out, because E4 is in the soprano's range
+    # and the search stopped at the first thing that was. Two keys out of
+    # twenty-six came back to where they started. It also parks the tune at
+    # the bottom of the range, which is where the three voices underneath
+    # have the least room to work.
+    # Measured against the melody that came in, not against the transposed
+    # one: the transposed copy is what is being shifted, so scoring the
+    # shifts by their distance from it makes shift zero win by definition
+    # and reinstates the bug this replaced.
+    incoming = [p for p in melody if p is not None]
+    was = sum(p.midi for p in incoming) / len(incoming)
+    best = None
     for shift in (0, -1, 1, -2, 2):
         candidate = [None if p is None else Pitch(p.letter, p.octave + shift, p.alteration)
                      for p in moved]
         inside = [p for p in candidate if p is not None]
-        if all(low.midi <= p.midi <= high.midi for p in inside):
-            return candidate
-    return moved
+        if not all(low.midi <= p.midi <= high.midi for p in inside):
+            continue
+        now = sum(p.midi for p in inside) / len(inside)
+        if best is None or abs(now - was) < best[0]:
+            best = (abs(now - was), candidate)
+    return best[1] if best else moved
 
 
 def parse_soprano(text: str) -> list[Pitch | None]:
