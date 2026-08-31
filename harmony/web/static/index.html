@@ -2476,7 +2476,7 @@
      Until an endpoint is set the box says so rather than pretending to
      send. Getting one is a minute of work at formspree.io or any service
      like it: make a form, point it at the address, paste the id below. */
-  var SUGGESTION_ENDPOINT = "";      // e.g. "https://formspree.io/f/xxxxxxxx"
+  var SUGGESTION_ENDPOINT = "https://formspree.io/f/mnpqpqay";
 
   (function () {
     var box = document.getElementById("suggestion");
@@ -2488,9 +2488,6 @@
       note.className = "suggest-note" + (kind ? " " + kind : "");
     }
 
-    if (!SUGGESTION_ENDPOINT) {
-      say("Not connected yet - set SUGGESTION_ENDPOINT in the page.");
-    }
 
     send.addEventListener("click", function () {
       var text = box.value.trim();
