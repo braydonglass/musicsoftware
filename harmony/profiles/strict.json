@@ -63,7 +63,7 @@
     "spacing": {
       "enabled": true,
       "severity": "error",
-      "cost": "inf"
+      "cost": 500.0
     },
     "voice_crossing": {
       "enabled": true,
@@ -83,13 +83,13 @@
     "parallel_perfect": {
       "enabled": true,
       "severity": "error",
-      "cost": "inf",
+      "cost": 9000.0,
       "waived_cost": 40.0
     },
     "parallel_altered": {
       "enabled": true,
       "severity": "error",
-      "cost": "inf"
+      "cost": 2500.0
     },
     "voice_overlap": {
       "enabled": true,
@@ -99,18 +99,18 @@
     "leading_tone_resolution": {
       "enabled": true,
       "severity": "error",
-      "cost": "inf",
+      "cost": 1500.0,
       "waived_cost": 25.0
     },
     "seventh_resolution": {
       "enabled": true,
       "severity": "error",
-      "cost": "inf"
+      "cost": 1200.0
     },
     "melodic_augmented": {
       "enabled": true,
       "severity": "error",
-      "cost": "inf"
+      "cost": 800.0
     },
     "large_leap": {
       "enabled": true,
@@ -135,25 +135,25 @@
     "hidden_perfect": {
       "enabled": true,
       "severity": "error",
-      "cost": "inf",
-      "waived_cost": "inf"
+      "cost": 7000.0,
+      "waived_cost": 3000.0
     },
     "augmented_sixth_resolution": {
       "enabled": true,
       "severity": "error",
-      "cost": "inf"
+      "cost": 2000.0
     },
     "unequal_fifths": {
       "enabled": true,
       "severity": "error",
-      "cost": "inf",
-      "waived_cost": "inf"
+      "cost": 5000.0,
+      "waived_cost": 2000.0
     },
     "unequal_fourths": {
       "enabled": true,
       "severity": "error",
-      "cost": "inf",
-      "waived_cost": "inf"
+      "cost": 5000.0,
+      "waived_cost": 2000.0
     },
     "missing_essential_tone": {
       "enabled": true,
@@ -168,7 +168,7 @@
     "consecutive_perfects": {
       "enabled": true,
       "severity": "error",
-      "cost": "inf"
+      "cost": 8000.0
     },
     "doubled_leading_tone": {
       "enabled": true,
@@ -184,6 +184,12 @@
       "enabled": true,
       "severity": "error",
       "cost": "inf"
+    },
+    "prefers_oblique_motion": {
+      "enabled": true,
+      "severity": "style",
+      "cost": 1.0
     }
-  }
+  },
+  "notes": "Motion rules are priced, not forbidden: every chord can follow every chord, and what it cost to get there is reported. The prices are far above any ordinary preference, so a clean answer always wins where one exists. Ranges and chord identity stay absolute."
 }

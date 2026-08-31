@@ -217,18 +217,52 @@ def _context_faults(voicings, specs, key, profile, rules) -> int:
 
 
 def solve(specs, key, profile, k: int = 1, soprano=None, reinvert: bool = True):
-    """Realize as written, and only re-voice if that has no answer.
+    """Realize as written, and re-voice if that answer has faults in it.
 
     One place, so the CLI, the web layer and the tests cannot drift apart on
     when a substitution is allowed.
+
+    The test used to be whether writing it as asked had *an* answer. That
+    was the same question while the motion rules deleted edges: no answer
+    meant no clean answer. Once those rules are priced instead - so that
+    every chord can follow every chord and the cost says what it took - the
+    two questions come apart, and asking the old one silently stopped the
+    re-voicing from ever running. I IV V I came back with an overlapping
+    bass and tenor rather than as I IV V65 I, because the faulty answer
+    existed and nothing looked at whether it was any good.
+
+    So a faulty answer is not enough. If what was written comes back with
+    something wrong in it, the inversions are tried too and the clean one
+    wins; if neither is clean, the cheaper one does, which is the one that
+    breaks less.
     """
+    from .checker import check, errors_only
+
+    def graded(results):
+        first = results[0]
+        used = first.specs or specs
+        return len(errors_only(check(first.voicings, used, key, profile)))
+
     try:
-        return realize(specs, key, profile, k=k, soprano=soprano)
+        written = realize(specs, key, profile, k=k, soprano=soprano)
     except NoRealization:
         if not reinvert:
             raise
         return realize(specs, key, profile, k=k, soprano=soprano,
                        allow_inversions=True)
+
+    if not reinvert or graded(written) == 0:
+        return written
+    try:
+        revoiced = realize(specs, key, profile, k=k, soprano=soprano,
+                           allow_inversions=True)
+    except NoRealization:
+        return written
+    if graded(revoiced) < graded(written):
+        return revoiced
+    if graded(revoiced) == graded(written) and revoiced[0].cost < written[0].cost:
+        return revoiced
+    return written
 
 
 def _backtrack(columns, history, node: int, rank: int):

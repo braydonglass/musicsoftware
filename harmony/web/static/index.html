@@ -234,8 +234,12 @@
   .v-bass    .head, .v-bass .acc    { fill: var(--v-bass); }
   .v-bass    .stem                  { stroke: var(--v-bass); }
 
-  .legend { display: flex; font-size: 11px; }
-  .build { margin-left: auto; color: var(--ink-faint); font-size: 10px; }
+  .masthead {
+    display: flex; align-items: baseline; gap: 12px;
+    font-size: 10px; color: var(--ink-faint); letter-spacing: .1em;
+  }
+  .masthead .release b { color: var(--ink); font-weight: 400; margin-right: 8px; }
+  .build { margin-left: auto; color: var(--ink-faint); }
   /* The chord as a player names it, under the numeral that says what it
      does. Dimmer, because the numeral is the thing being taught. */
   .symbol     { fill: var(--ink-faint); font-family: var(--mono); font-size: 10px;
@@ -428,14 +432,17 @@
 
 <div class="rig">
 
+  <div class="masthead">
+    <span class="release"><b id="version"></b><span id="released"></span></span>
+    <span class="build" id="build"></span>
+  </div>
+
   <div class="stage">
     <div class="score-wrap">
       <svg class="score" id="score" role="img" aria-label="Four-part realization"></svg>
     </div>
     <div id="busy" role="status" aria-live="polite"><span class="spinner"></span>working</div>
   </div>
-
-  <div class="legend"><span class="build" id="build"></span></div>
 
   <div class="transport">
     <button id="play" disabled>Play</button>
@@ -2260,6 +2267,10 @@
      Python behind it is whatever was running when it started. */
   backend.profiles()
     .then(function (d) {
+      document.getElementById("version").textContent =
+        "Four-Part Harmony " + (d.version || "");
+      document.getElementById("released").textContent =
+        d.released ? "released " + d.released : "";
       document.getElementById("build").textContent = "engine " + (d.build || "?");
     }).catch(function () {});
 

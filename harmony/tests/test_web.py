@@ -8,6 +8,7 @@ partly pinned.
 
 import unittest
 
+from harmony.core.checker import check, errors_only
 from harmony.core.key import Key
 from harmony.core.melody import parse_soprano, transpose
 from harmony.core.roman import parse_progression
@@ -173,12 +174,25 @@ class ChoosingChordsAcrossThePhrase(unittest.TestCase):
         payload = candidates_payload(
             {"key": "c minor", "soprano": "Eb5 Eb5 F5 G5 G5 F5 Eb5 D5"})
         naive = [n["options"][0]["numeral"] for n in payload["notes"]]
-        self.assertNotEqual(naive, payload["suggested"])
-        key = Key.parse("c minor")
-        melody = parse_soprano("Eb5 Eb5 F5 G5 G5 F5 Eb5 D5")
-        with self.assertRaises(NoRealization):
-            solve(parse_progression(" ".join(naive), key), key,
-                  Profile.load("strict"), soprano=melody)
+        suggested = payload["suggested"]
+        self.assertNotEqual(naive, suggested)
+
+        # What the difference is now. Taking the first chord that fits used
+        # to give something the solver could not connect at all; it no
+        # longer does, because the options are pruned to chords that lie on
+        # a complete path and the first of those is a safe one. What it
+        # still gives is a line that goes nowhere - i i ii°6 i i ii°6 i ii°6,
+        # two chords alternating, ending on neither a tonic nor a dominant.
+        self.assertLessEqual(
+            len(set(naive)), 3,
+            f"the naive choice used to be this static: {naive}")
+        self.assertNotIn(naive[-1], ("i", "i6", "V", "V6", "V7"),
+                         f"the naive choice used to end nowhere: {naive}")
+        self.assertGreater(
+            len(set(suggested)), len(set(naive)),
+            f"reading the phrase should move more: {suggested}")
+        self.assertIn(suggested[-1], ("i", "i6", "V", "V6", "V7"),
+                      f"and should end somewhere: {suggested}")
 
     def test_it_ends_somewhere(self):
         """A phrase reaching a tonic should cadence on one."""

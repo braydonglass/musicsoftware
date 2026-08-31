@@ -130,36 +130,48 @@ class TestRealize(unittest.TestCase):
                     f"{name}.json says nothing about these registered rules")
 
     def test_reinversion_rescues_what_it_can(self):
-        """iv -> V in minor survives only by re-voicing, and says so."""
+        """iv -> V in minor survives only by re-voicing, and says so.
+
+        The test used to be that writing it as asked had no answer at all.
+        Now that the motion rules are priced rather than absolute it has one,
+        and the thing worth checking is that the answer is bad: re-voicing
+        exists to turn a faulty realization into a clean one, so the faulty
+        one has to be there to be turned.
+        """
         # V6 puts the leading tone in the bass, so the next bass must be the
         # tonic. IV cannot supply it; IV6 can.
         key = Key.parse("C major")
         specs = parse_progression("I V6 IV", key)
-        with self.assertRaises(NoRealization):
-            realize(specs, key, self.profile)          # exactly as written
+        as_written = realize(specs, key, self.profile)[0]
+        self.assertNotEqual(
+            errors_only(check(as_written.voicings, specs, key, self.profile)), [],
+            "writing it as asked should still be faulty; nothing to rescue")
         result = solve(specs, key, self.profile)[0]    # with re-voicing allowed
         swaps = result.substitutions(specs)
         self.assertTrue(swaps, "it should report what it changed")
         self.assertFalse(any(u.endswith("64") for _, _, u in swaps),
                          "a six-four is not a general-purpose substitute")
 
-    def test_impossible_progression_names_the_transition_and_the_rules(self):
-        """V6 puts the leading tone in the bass, so the next bass must be the tonic.
+    def test_a_progression_that_cannot_be_written_cleanly_says_what_it_broke(self):
+        """Every chord can follow every chord. What it cost has to be said.
 
-        vi cannot supply that, and the engine has to say so rather than
-        shrugging. An unrealizable progression is a fact worth reporting.
+        This used to check that the engine refused the progression and named
+        the rule in the refusal. It no longer refuses anything - the motion
+        rules are priced, so there is always an answer - and the same
+        obligation lands on the report instead: the answer comes back with
+        its faults named, rather than looking like a clean one.
         """
         key = Key.parse("C major")
         specs = parse_progression("I V6 I6 IV", key)
-        with self.assertRaises(NoRealization) as caught:
-            solve(specs, key, self.profile)
-        message = str(caught.exception)
-        self.assertIn("V6", message)
-        self.assertIn("I6", message)
-        # it must name a rule, not just shrug
-        self.assertTrue(any(word in message for word in
-                            ("leading_tone", "hidden_perfect", "parallel")),
-                        f"the failure should name what blocked it: {message}")
+        result = solve(specs, key, self.profile)[0]
+        faults = errors_only(check(result.voicings, result.specs or specs,
+                                   key, self.profile))
+        self.assertNotEqual(faults, [], "it came back looking clean")
+        named = " ".join(f.rule_id for f in faults)
+        self.assertTrue(
+            any(word in named for word in
+                ("leading_tone", "hidden_perfect", "parallel", "unequal")),
+            f"the faults should name what went wrong: {named}")
 
 
 class TheSeventhThatStopsBeingADissonance(unittest.TestCase):
@@ -464,7 +476,10 @@ class ThePriceOfStrictness(unittest.TestCase):
     and any change to it has to be looked at on purpose.
     """
 
-    UNWRITABLE_AS_TYPED = {
+    # Not "has no answer" any more - everything has one. These are the
+    # progressions whose answer, written exactly as asked, has a fault in it
+    # and needs re-voicing to come out clean.
+    FAULTY_AS_TYPED = {
         ("C major", "I IV V I"),
         ("C major", "I vi IV V I"),
         ("C major", "I V/V V I"),
@@ -478,18 +493,18 @@ class ThePriceOfStrictness(unittest.TestCase):
     def test_the_price_of_refusing_every_direct_interval(self):
         from harmony.core.solver import realize
         profile = Profile.load("strict")
-        unwritable = set()
+        faulty = set()
         for key_text, progression in CLEAN_CORPUS:
             key = Key.parse(key_text)
             specs = parse_progression(progression, key)
-            try:
-                realize(specs, key, profile)
-            except NoRealization:
-                unwritable.add((key_text, progression))
+            result = realize(specs, key, profile)[0]
+            if errors_only(check(result.voicings, specs, key, profile)):
+                faulty.add((key_text, progression))
         self.assertEqual(
-            unwritable, self.UNWRITABLE_AS_TYPED,
-            "the set of progressions this profile refuses has changed; if that "
-            "was on purpose, update UNWRITABLE_AS_TYPED and say why")
+            faulty, self.FAULTY_AS_TYPED,
+            "the set of progressions this profile cannot write cleanly as typed "
+            "has changed; if that was on purpose, update FAULTY_AS_TYPED and "
+            "say why")
 
     def test_what_cannot_be_written_is_still_answered(self):
         """A refusal is not a crash: solve() re-voices, and says that it did."""

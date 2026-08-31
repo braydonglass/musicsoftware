@@ -17,6 +17,7 @@ from urllib.parse import parse_qs, urlparse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
+from ..version import RELEASED, VERSION
 from ..core.checker import check, errors_only, explained_breaks
 from ..core.embellish import apply as place_figures
 from ..core.embellish import opportunities
@@ -274,7 +275,8 @@ class Handler(BaseHTTPRequestHandler):
             return
         if self.path == "/api/profiles":
             names = sorted(p.stem for p in PROFILE_DIR.glob("*.json"))
-            self._json(200, {"ok": True, "profiles": names, "build": _build_stamp()})
+            self._json(200, {"ok": True, "profiles": names, "build": _build_stamp(),
+                             "version": VERSION, "released": RELEASED})
             return
         self._send(404, b"not found", "text/plain")
 

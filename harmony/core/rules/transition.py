@@ -486,6 +486,51 @@ def seventh_resolution(ctx: TransitionContext) -> list[Violation]:
 
 
 @register(
+    rule_id="prefers_oblique_motion",
+    scope="transition", severity="style", cost=1.0, category="voice_leading",
+    explanation=("A voice that stays put is the safest thing in the texture: it "
+                 "cannot make a parallel, cannot cross, cannot leap badly. Where "
+                 "none can stay, two pairs moving together in thirds or sixths "
+                 "is the next best thing, because a third and a sixth are the "
+                 "two intervals that can run in parallel indefinitely."),
+)
+def prefers_oblique_motion(ctx: TransitionContext) -> list[Violation]:
+    """Priced by what is missing rather than by what is wrong.
+
+    Nothing here is a fault. It is a thumb on the scale, small enough that
+    any real rule outranks it and large enough to choose between answers
+    that are otherwise tied - which is most of them.
+
+    Held notes first. A voice that does not move cannot form a parallel
+    with anything, and every common-tone-retained progression in the
+    repertoire is built on that. Where nothing can be held, the texture
+    wants voices moving in thirds and sixths: those are the two intervals
+    that may run in parallel for as long as they like, so a pair moving in
+    them is a pair that cannot go wrong. Two such pairs is the whole
+    texture accounted for.
+    """
+    held = [n for n in VOICE_NAMES if not _moved(ctx, n)]
+    if held:
+        return []
+    good_pairs = 0
+    for upper, lower in ALL_PAIRS:
+        if _direction(ctx, upper) != _direction(ctx, lower):
+            continue
+        before = interval_between(ctx.a[upper], ctx.a[lower]).simplified()
+        after = interval_between(ctx.b[upper], ctx.b[lower]).simplified()
+        if before.generic == after.generic and before.generic in (3, 6):
+            good_pairs += 1
+    if good_pairs >= 2:
+        return []
+    return [Violation(
+        "prefers_oblique_motion", [], ctx.index,
+        "no voice holds, and fewer than two pairs move together in thirds "
+        "or sixths",
+        weight=2.0 if good_pairs == 0 else 1.0,
+    )]
+
+
+@register(
     rule_id="similar_motion",
     scope="transition", severity="style", cost=6.0, category="voice_leading",
     explanation=("Three or more voices moving the same way. Not a fault in "
