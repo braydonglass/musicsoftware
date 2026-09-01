@@ -404,7 +404,9 @@
     border-left: 2px solid var(--cyan-dim); padding-left: 9px;
   }
   .exceptions b { color: var(--cyan); font-weight: 400; }
+  .exceptions b.exc-err-heading { color: var(--red); }
   .exceptions .exc-what { color: var(--cyan-dim); margin-top: 5px; }
+  .exceptions .exc-what.exc-err { color: var(--red); }
   .exceptions .exc-why { color: var(--ink-faint); margin: 2px 0 0 14px; max-width: 74ch; }
 
   .transport {
@@ -1782,6 +1784,19 @@ window.HARMONY_SOURCES = {
     var box = document.getElementById("exceptions");
     box.innerHTML = "";
     if (!payload || !payload.ok) return;
+    var errors = payload.results[currentIndex].violations || [];
+    if (errors.length) {
+      var errHeading = document.createElement("div");
+      errHeading.innerHTML = "<b class=\"exc-err-heading\">" + errors.length +
+        " rule" + (errors.length > 1 ? "s" : "") + " broken</b>";
+      box.appendChild(errHeading);
+      errors.forEach(function (item) {
+        var line = document.createElement("div");
+        line.className = "exc-what exc-err";
+        line.textContent = "chord " + (item.chord + 1) + " · " + item.message;
+        box.appendChild(line);
+      });
+    }
     var waived = payload.results[currentIndex].exceptions || [];
     if (!waived.length) return;
     var heading = document.createElement("div");
