@@ -161,21 +161,6 @@ class Interval:
                   "major": "M", "augmented": "A"}[self.quality]
         return f"{letter}{self.generic}"
 
-    @property
-    def is_perfect_consonance(self) -> bool:
-        """True for P1, P5 and P8, the three intervals rule 6 forbids in parallel.
-
-        The perfect fourth is deliberately excluded: parallel fourths are
-        permitted between upper voices.
-        """
-        simple = self.simplified()
-        if simple.generic not in (1, 5, 8):
-            return False
-        try:
-            return simple.quality == "perfect"
-        except UnknownQuality:
-            return False
-
     def __str__(self) -> str:
         try:
             return self.abbreviation
@@ -192,7 +177,7 @@ def interval_between(a: Pitch, b: Pitch) -> Interval:
     number: without it C#4 against Db4 reads as a unison rather than the
     diminished second it is.
     """
-    low, high = sorted([a, b], key=lambda p: (p.midi, p.diatonic_index))
+    low, high = (a, b) if (a.midi, a.diatonic_index) <= (b.midi, b.diatonic_index) else (b, a)
     # The +1 is inclusive counting. C up to G touches five letter names and
     # is a fifth, even though the index difference is 4.
     return Interval(

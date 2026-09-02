@@ -417,15 +417,14 @@
     padding-bottom: 2px;
   }
   .transport .chips { margin-left: auto; }
-  /* The three staff-level toggles and the soprano box they can open, tucked
-     under the bottom-right corner of the staff rather than the progression
-     field - they act on the staff, not on the text you type into it. */
-  .staff-controls {
-    display: flex; flex-direction: column; align-items: flex-end; gap: 7px;
-  }
-  .staff-actions { display: flex; gap: 6px; }
-  .staff-controls #sopranoField { width: min(280px, 100%); }
-  .staff-controls #sopranoField input { width: 100%; }
+  /* The three staff-level toggles, on their own line directly under
+     Realize/Play/Export/Reset - left-aligned the same as that row. */
+  .staff-actions { display: flex; gap: 6px; margin-top: 7px; }
+  /* The soprano box the "Keep soprano" toggle opens, under that same
+     left-aligned corner so it reads as belonging to the row above it. */
+  .soprano-row { display: flex; justify-content: flex-start; }
+  .soprano-row #sopranoField { width: min(280px, 100%); }
+  .soprano-row #sopranoField input { width: 100%; }
   .field label.stacked { margin-top: 12px; }
   /* Which key the held tune is in. The notes alone do not say: E-flat F G
      is a minor melody and F G A a major one, and once the soprano is
@@ -494,22 +493,6 @@
     <div id="busy" role="status" aria-live="polite"><span class="spinner"></span>working</div>
   </div>
 
-  <div class="staff-controls">
-    <div class="staff-actions">
-      <button id="keep"
-              title="Work from a fixed melody. The box appears, the tune stays put, and only new chords are left to the engine.">Keep soprano</button>
-      <button id="figuresOn" title="Show embellishments, and the menu for them">Embellishments</button>
-      <button id="intervals" title="Draw every interval and label it">Intervals</button>
-    </div>
-
-    <div class="field" id="sopranoField" hidden>
-      <label for="soprano">Soprano<span
-        class="held-key" id="heldKey"></span></label>
-      <input id="soprano" spellcheck="false"
-             placeholder="E5 F5 D5 C5">
-    </div>
-  </div>
-
   <div class="transport">
     <button class="primary" id="go">Realize</button>
     <button id="play" disabled>Play</button>
@@ -517,6 +500,22 @@
     <button id="reset" class="danger"
             title="Empty the staff, start again, and ask the questions you turned off">Reset</button>
     <div class="chips" id="alts"></div>
+  </div>
+
+  <div class="staff-actions">
+    <button id="keep"
+            title="Work from a fixed melody. The box appears, the tune stays put, and only new chords are left to the engine.">Keep soprano</button>
+    <button id="figuresOn" title="Show embellishments, and the menu for them">Embellishments</button>
+    <button id="intervals" title="Draw every interval and label it">Intervals</button>
+  </div>
+
+  <div class="soprano-row">
+    <div class="field" id="sopranoField" hidden>
+      <label for="soprano">Soprano<span
+        class="held-key" id="heldKey"></span></label>
+      <input id="soprano" spellcheck="false"
+             placeholder="E5 F5 D5 C5">
+    </div>
   </div>
 
   <div class="status" id="status"></div>

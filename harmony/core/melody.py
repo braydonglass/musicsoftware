@@ -44,8 +44,18 @@ def candidates_for(
     key: Key,
     profile: Profile,
     vocabulary: list[str] | None = None,
+    index: int | None = None,
+    cache: dict | None = None,
 ) -> list[dict]:
-    """Every chord that can carry this note in the soprano, with its spelling."""
+    """Every chord that can carry this note in the soprano, with its spelling.
+
+    index and cache are optional and exist for one caller: a melody-wide
+    request that goes on to call workable()/suggest() for the same notes,
+    where passing the same (index, cache) pair through all three means the
+    generate() this already ran is reused rather than repeated. Called on
+    its own - the CLI, or a single note with no position in a phrase -
+    index is None and every call is independent, exactly as before.
+    """
     out = []
     for token in vocabulary or vocabulary_for(key):
         try:
@@ -54,7 +64,10 @@ def candidates_for(
             continue
         if soprano.pitch_class.chroma not in spec.chroma_set:
             continue
-        if not generate(spec, key, profile, soprano=soprano):
+        voicings = (_voicings(cache, index, token, spec, key, profile, soprano)
+                    if cache is not None and index is not None
+                    else generate(spec, key, profile, soprano=soprano))
+        if not voicings:
             continue
         out.append({
             "numeral": token,
@@ -117,17 +130,42 @@ DOMINANT = ("V", "V6", "V7", "V65", "vii°6", "vii°7")
 BEAM = 40
 
 
-def _layers(options, melody, key, profile):
-    """Every (chord, spec, voicing) the melody allows, note by note."""
+def _voicings(cache, index, token, spec, key, profile, note):
+    """generate(), memoized on (index, token) for the life of one request.
+
+    workable() and suggest() always run back to back on the same melody and
+    ask this for the same (index, token) pairs - the melody note at a given
+    index never changes between them - so the second call was pure waste
+    without this. Keyed on index rather than the note itself because a hole
+    substitutes the whole vocabulary in, and the token/spec pairing already
+    determines everything generate() needs beyond the note.
+    """
+    key_ = (index, token)
+    if key_ not in cache:
+        cache[key_] = generate(spec, key, profile, soprano=note)
+    return cache[key_]
+
+
+def _layers(options, melody, key, profile, cache=None):
+    """Every (chord, spec, voicing) the melody allows, note by note.
+
+    A hole (melody[index] is None) has no note to constrain it, so
+    options[index] is always empty there - that means "nothing was
+    checked," not "nothing is possible." The vocabulary stands in instead,
+    so a hole is a real link in the chain rather than a break in it.
+    """
+    if cache is None:
+        cache = {}
     out = []
     for index, note in enumerate(melody):
         here = []
-        for token in options[index]:
+        tokens = options[index] if note is not None else vocabulary_for(key)
+        for token in tokens:
             try:
                 spec = parse(token, key)
             except (RomanNumeralError, ValueError):
                 continue
-            for voicing, _ in generate(spec, key, profile, soprano=note):
+            for voicing, _ in _voicings(cache, index, token, spec, key, profile, note):
                 here.append((token, spec, voicing))
         out.append(here)
     return out
@@ -166,7 +204,7 @@ def _reaches(layers, key, profile, rules):
 
 
 def workable(options: list[list[str]], melody: list[Pitch | None],
-             key: Key, profile: Profile) -> list[list[str]]:
+             key: Key, profile: Profile, cache: dict | None = None) -> list[list[str]]:
     """Prune each note's chords to the ones that can actually be used.
 
     candidates_for answers whether a chord can carry a note. It cannot
@@ -185,7 +223,7 @@ def workable(options: list[list[str]], melody: list[Pitch | None],
     still take a step off all of them. That is suggest()'s problem.
     """
     rules = profile.rules("transition")
-    alive = _reaches(_layers(options, melody, key, profile), key, profile, rules)
+    alive = _reaches(_layers(options, melody, key, profile, cache), key, profile, rules)
     if alive is None:
         return options
     kept = []
@@ -197,7 +235,8 @@ def workable(options: list[list[str]], melody: list[Pitch | None],
 
 def suggest(options: list[list[str]], key: Key,
             melody: list[Pitch | None] | None = None,
-            profile: Profile | None = None) -> list[str]:
+            profile: Profile | None = None,
+            cache: dict | None = None) -> list[str]:
     """Choose one chord per note, reading the melody as a phrase.
 
     Picking each note's first workable chord independently is what produces
@@ -212,6 +251,22 @@ def suggest(options: list[list[str]], key: Key,
     chords that can all carry the same note. The solver still has the final
     word, and still says so when it cannot connect them.
     """
+    # A hole has no note to constrain it, so options[index] is always empty
+    # there - that means "nothing was checked", not "nothing fits". Search
+    # the vocabulary instead, restricted to what can actually be voiced
+    # unconstrained, so one hole does not collapse the whole phrase to the
+    # naive per-note fallback below - which is exactly the degenerate
+    # pattern this function exists to avoid.
+    if cache is None:
+        cache = {}
+    if melody is not None and profile is not None:
+        options = [
+            choices if melody[index] is not None else
+            [token for token in vocabulary_for(key)
+             if _voicings(cache, index, token, parse(token, key), key, profile, None)]
+            for index, choices in enumerate(options)
+        ]
+
     if not options or any(not choices for choices in options):
         return [choices[0] if choices else "" for choices in options]
 
@@ -234,7 +289,7 @@ def suggest(options: list[list[str]], key: Key,
                 except (RomanNumeralError, ValueError):
                     continue
                 cells[(index, token)] = [(token, spec, v) for v, _
-                                         in generate(spec, key, profile, soprano=note)]
+                                         in _voicings(cache, index, token, spec, key, profile, note)]
         for index in range(len(options) - 1):
             for left in options[index]:
                 for right in options[index + 1]:

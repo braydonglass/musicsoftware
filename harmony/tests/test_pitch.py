@@ -77,10 +77,6 @@ class TestIntervalMeasurement(unittest.TestCase):
         twelfth = interval_between(P("C4"), P("G5"))
         self.assertEqual(twelfth, Interval(12, 19))
         self.assertEqual(twelfth.simplified(), Interval(5, 7))
-        self.assertTrue(twelfth.is_perfect_consonance)
-
-    def test_perfect_fourth_is_not_a_parallel_hazard(self):
-        self.assertFalse(interval_between(P("C4"), P("F4")).is_perfect_consonance)
 
 
 class TestPitchConstruction(unittest.TestCase):

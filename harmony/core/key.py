@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from functools import lru_cache
 
 from .pitch import LETTER_NAMES, LETTER_SEMITONES, Pitch, PitchClass
 
@@ -80,11 +81,14 @@ class Key:
         """Scale degree 7, raised in minor. The tone rules 4a and 8 care about."""
         return self.scale_degree(7, raised=(self.mode == "minor"))
 
+    @lru_cache(maxsize=None)
     def signature(self) -> dict[int, int]:
         """Letter -> alteration, as the key signature spells it.
 
         Minor uses the natural form, so the raised seventh reads as an
-        accidental rather than as part of the key.
+        accidental rather than as part of the key. Cached: is_altered()
+        calls this once per pitch class checked, from inside the solver's
+        innermost voicing loop, and it is invariant for a given Key.
         """
         return {
             self.scale_degree(n).letter: self.scale_degree(n).alteration

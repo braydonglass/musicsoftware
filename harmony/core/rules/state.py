@@ -176,8 +176,14 @@ def doubled_tendency_tone(ctx: StateContext) -> list[Violation]:
         labels[ctx.spec.aug6_lower_pc] = "lowered sixth"
     if ctx.spec.aug6_upper_pc is not None:
         labels[ctx.spec.aug6_upper_pc] = "raised fourth"
+    # The leading tone has its own dedicated rule, doubled_leading_tone.
+    # In a minor key it is also chromatically altered against the
+    # signature, so without this exclusion it fell into the generic
+    # "altered tone" branch below and got charged there too - the same
+    # doubling, reported and priced twice, only in minor keys.
+    excluded = {ctx.spec.leading_tone_pc} if ctx.spec.leading_tone_pc is not None else set()
     for pc in ctx.spec.pitch_classes:
-        if ctx.key.is_altered(pc) and pc not in labels:
+        if ctx.key.is_altered(pc) and pc not in labels and pc not in excluded:
             labels[pc] = "altered tone"
     tendency = [(label, pc) for pc, label in labels.items()]
 
@@ -304,6 +310,20 @@ def incomplete_chord(ctx: StateContext) -> list[Violation]:
     missing = [pc for pc in ctx.spec.pitch_classes if pc.chroma not in present]
     if not missing:
         return []
+
+    if ctx.spec.aug6_type is not None:
+        # No root, third or fifth in the tertian sense - only the two
+        # tones the chord is named for, and whatever fills the middle.
+        # Neither "sanctioned root-position omission" nor pitch_classes[2]
+        # meaning "the fifth" applies here, so this chord gets its own
+        # labelling rather than falling into the triad case below.
+        edge = {ctx.spec.aug6_lower_pc, ctx.spec.aug6_upper_pc}
+        return [Violation(
+            "incomplete_chord", [], ctx.index,
+            f"{ctx.spec.numeral} omits "
+            f"{'the augmented sixth itself' if pc in edge else 'its middle tone'} {pc}",
+        ) for pc in missing]
+
     # Dropping the fifth of a root-position triad is the sanctioned omission,
     # so it costs less than losing a third or a seventh.
     fifth = ctx.spec.pitch_classes[2]

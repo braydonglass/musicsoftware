@@ -11,7 +11,7 @@ engine is reading interval quality rather than counting semitones.
 
 import unittest
 
-from harmony.core.checker import check, errors_only, exceptions_only
+from harmony.core.checker import check, errors_only, exceptions_only, explained_breaks
 from harmony.core.key import Key
 from harmony.core.pitch import Pitch
 from harmony.core.roman import parse, parse_progression
@@ -225,6 +225,38 @@ class BrokenCorpus(unittest.TestCase):
         self.assertEqual(flagged[0].severity, "warning")
         self.assertIn("motion", flagged[0].reason)
 
+    def test_doubled_leading_tone_in_minor_is_not_charged_twice(self):
+        """The leading tone is chromatically altered in minor, same as a
+        chordal seventh - doubled_tendency_tone must still leave it alone.
+
+        The bug: only the seventh and aug6 tones were excluded from its
+        generic "altered tone" sweep, so a minor-key doubling paid for
+        doubled_leading_tone and doubled_tendency_tone both, for a fault
+        that costs one rule's price everywhere else.
+        """
+        key = Key.parse("a minor")
+        specs = parse_progression("V", key)
+        graded = check([voicing("G#4", "E4", "G#3", "E2")], specs, key, self.profile)
+        self.assertIn("doubled_leading_tone", [v.rule_id for v in graded])
+        self.assertNotIn("doubled_tendency_tone", [v.rule_id for v in graded])
+
+    def test_an_incomplete_augmented_sixth_is_not_called_missing_a_fifth(self):
+        """An aug6 has no root or fifth in the tertian sense to lose.
+
+        The bug: incomplete_chord fell through to the triad case for any
+        chord, so a German sixth missing only its middle tone was labelled
+        as if it had omitted "the fifth" and priced as the sanctioned
+        root-position omission - neither of which describes this chord.
+        """
+        key = Key.parse("C major")
+        specs = parse_progression("Ger+6", key)
+        # Ab, C, F# present; Eb (the middle, filler tone) missing
+        graded = check([voicing("F#4", "C4", "C3", "Ab2")], specs, key, self.profile)
+        incomplete = [v for v in graded if v.rule_id == "incomplete_chord"]
+        self.assertTrue(incomplete, "a missing tone should still be reported")
+        self.assertNotIn("fifth", incomplete[0].message)
+        self.assertIn("Eb", incomplete[0].message)
+
     def test_voice_crossing_is_caught(self):
         errs = self.errors("C major", "I", [voicing("C4", "E4", "G3", "C3")])
         self.assertTrue(any(e.rule_id == "voice_crossing" for e in errs))
@@ -286,6 +318,28 @@ class BrokenCorpus(unittest.TestCase):
         self.assertIn("tendency tone", waived[0].reason)
         # and never mistaken for genuine parallel fifths
         self.assertFalse(any(v.rule_id == "parallel_perfect" for v in graded))
+
+    def test_unequal_fifths_without_an_excuse_is_a_warning_with_the_lesson(self):
+        """Discouraged, not forbidden - and the student is told why.
+
+        Same d5-to-P5 shape as the excused case above, but from a plain
+        major triad with nothing to force it. It is technically legal (not
+        a true parallel), so it must not block the solver or count as an
+        error - but it must still carry the reason it is discouraged, the
+        same way a waived exception does.
+        """
+        key = Key.parse("C major")
+        specs = parse_progression("I IV", key)
+        voicings = [voicing("F4", "B3", "F3", "D3"), voicing("G4", "C4", "E3", "C3")]
+        graded = check(voicings, specs, key, self.profile)
+
+        flagged = [v for v in graded if v.rule_id == "unequal_fifths"]
+        self.assertTrue(flagged, "the d5 to P5 shape should still be reported")
+        self.assertEqual(flagged[0].severity, "warning")
+        self.assertFalse(flagged[0].waived)
+        self.assertIn("not a true parallel", flagged[0].reason.lower())
+        self.assertNotIn("unequal_fifths", [e.rule_id for e in errors_only(graded)])
+        self.assertIn("unequal_fifths", [e.rule_id for e in explained_breaks(graded)])
 
     def test_a_held_fifth_is_static_not_parallel(self):
         # soprano and alto hold a perfect fifth while only the bass moves

@@ -25,7 +25,7 @@ from .core.checker import errors_only, explained_breaks, voicings_from_lines
 from .core.key import Key
 from .core.roman import RomanNumeralError, parse_progression
 from .core.rules.registry import REGISTRY, Profile
-from .core.solver import NoRealization, solve
+from .core.solver import NoRealization, realize, solve
 from .core.voice import VOICE_NAMES
 
 DEFAULT_PROFILE = "strict"
@@ -103,12 +103,21 @@ def cmd_realize(args) -> int:
     melody = parse_soprano(args.soprano) if getattr(args, "soprano", None) else None
 
     # What was typed is a decision, so it gets the first attempt untouched.
-    # Only when that has no answer does the solver get to choose inversions.
+    # solve() may still choose other inversions - either because nothing at
+    # all connects as written, or because something does but it carries an
+    # unwaived fault, and a cleaner answer was preferred. Those are different
+    # things to tell the user, so the plain as-written search is repeated
+    # here just to tell them apart.
     results = solve(specs, key, profile, k=args.alternates, soprano=melody,
                     reinvert=not args.no_reinvert)
     swaps = results[0].substitutions(specs)
     if swaps:
-        print("  as written it has no answer; re-voiced "
+        try:
+            realize(specs, key, profile, soprano=melody)
+            reason = "as written it broke a rule; re-voiced "
+        except NoRealization:
+            reason = "as written it has no answer; re-voiced "
+        print("  " + reason
               + ", ".join(f"{w} as {u} (chord {i})" for i, w, u in swaps))
 
     for index, result in enumerate(results):

@@ -43,7 +43,12 @@ def generate(spec: ChordSpec, key: Key, profile: Profile,
     A given `soprano` pins the top voice, which is how a supplied melody is
     harmonized: the search runs exactly as before, over a narrower column.
     """
-    state_rules = profile.rules("state")
+    # spacing and voice_crossing are already enforced by the manual pruning
+    # below, on every voice pair they cover - running them again on a
+    # candidate that already survived that pruning can never find a
+    # violation.
+    state_rules = [r for r in profile.rules("state")
+                   if r.id not in ("spacing", "voice_crossing")]
     low, high = profile.ranges["bass"]
     basses = pitches_in_range(spec.bass_pc, low, high)
 

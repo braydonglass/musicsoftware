@@ -237,21 +237,34 @@ def consecutive_perfects(ctx: TransitionContext) -> list[Violation]:
     return out
 
 
+UNEQUAL_FIFTHS_LESSON = (
+    "Not a true parallel fifth - the quality changes, perfect to diminished "
+    "or diminished to perfect, so nothing is exactly repeated. But it reads "
+    "as one: two fifths sliding in the same direction look and sound enough "
+    "like parallel motion that practice avoids it wherever a real "
+    "alternative exists, even though it is not actually forbidden."
+)
+
+
 @register(
     rule_id="unequal_fifths",
-    scope="transition", severity="error", cost=math.inf, category="voice_leading",
+    scope="transition", severity="warning", cost=math.inf, category="voice_leading",
     explanation=("Two fifths in a row where only the quality differs - perfect to "
-                 "diminished, or diminished to perfect. Not parallel fifths, since "
-                 "the intervals are not the same, but the ear hears two fifths "
-                 "moving together and both directions are policed."),
+                 "diminished, or diminished to perfect. Not literally parallel, since "
+                 "the interval's quality changes, but two fifths sliding the same way "
+                 "read as parallel motion regardless, so it is discouraged heavily "
+                 "rather than forbidden outright."),
 )
 def unequal_fifths(ctx: TransitionContext) -> list[Violation]:
-    """Both directions, policed by default and excused where practice excuses.
+    """Both directions, discouraged by default and excused where practice excuses.
 
-    A diminished chord or a secondary dominant drives every voice to a step
-    resolution, and holding those resolutions can force one fifth into the
-    other. Those cases are reported as exceptions rather than errors, so the
-    rule and the reason to break it arrive together.
+    Audibly, and on the page, this is not a parallel fifth: the interval's
+    quality changes, so nothing repeats exactly. It still reads as one at a
+    glance, which is what this rule protects against - so it is priced
+    heavily to be avoided wherever there is a real alternative, rather than
+    blocked as a true parallel fifth is. A true parallel - the same quality
+    both times - is a different rule (parallel_perfect / parallel_altered)
+    and stays absolutely forbidden.
     """
     scope = ctx.profile.param("unequal_fifths", "all")
     pairs = ALL_PAIRS if scope == "all" else [p for p in ALL_PAIRS if "bass" in p]
@@ -278,9 +291,9 @@ def unequal_fifths(ctx: TransitionContext) -> list[Violation]:
             f"{before.quality} fifth to {after.quality} fifth: "
             f"{ctx.a[upper]}/{ctx.a[lower]} moving to "
             f"{ctx.b[upper]}/{ctx.b[lower]}",
-            severity="exception" if excuse else "error",
+            severity="exception" if excuse else "warning",
             waived=bool(excuse),
-            reason=excuse,
+            reason=excuse or UNEQUAL_FIFTHS_LESSON,
         ))
     return out
 

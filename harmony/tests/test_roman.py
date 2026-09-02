@@ -75,6 +75,18 @@ class TestRomanNumerals(unittest.TestCase):
         self.assertEqual(str(parse("vii°6", self.C).bass_pc), "D")
         self.assertEqual(str(parse("I6", self.C).bass_pc), "E")
 
+    def test_minor_tonic_seventh_is_fully_diatonic(self):
+        """i7 needs no accidental - it is the tonic, not a dominant.
+
+        The bug: seventh_degree lands on 7 only when this chord's own
+        degree is 1, and the old condition raised that seventh as if it
+        were a leading tone regardless, which made a legal chord fail to
+        parse at all.
+        """
+        self.assertEqual(names(parse("i7", self.a)), ["A", "C", "E", "G"])
+        for figure in ("i65", "i43", "i42"):
+            self.assertEqual(names(parse(figure, self.a)), ["A", "C", "E", "G"])
+
     def test_seventh_is_tagged(self):
         self.assertEqual(str(parse("V7", self.C).seventh_pc), "F")
         self.assertEqual(str(parse("ii7", self.C).seventh_pc), "C")

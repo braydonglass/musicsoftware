@@ -29,7 +29,7 @@ from ..core.roman import RomanNumeralError, parse_progression
 from ..core.roman import parse as parse_roman
 from ..core.rules.registry import PROFILE_DIR, Profile
 from ..core.rules.state import position_of
-from ..core.solver import NoRealization, realize, solve
+from ..core.solver import NoRealization, solve
 from ..core.voice import VOICE_NAMES
 
 STATIC = Path(__file__).resolve().parent / "static"
@@ -81,14 +81,20 @@ def candidates_payload(request: dict) -> dict:
         except (RomanNumeralError, ValueError):
             continue
         vocabulary.append(token)
-    found = [candidates_for(note, key, profile, vocabulary) if note is not None else []
-             for note in melody]
+    # candidates_for, workable and suggest below all end up asking generate()
+    # the same (note index, chord) question - each only ever narrows what
+    # the one before it already searched - so one cache threaded through all
+    # three means each later call reuses that work instead of redoing it.
+    voicing_cache: dict = {}
+    found = [candidates_for(note, key, profile, vocabulary, index=i, cache=voicing_cache)
+             if note is not None else []
+             for i, note in enumerate(melody)]
 
     # Then drop the ones that cannot be joined to their neighbours. Carrying
     # the note is only half of what a chord has to do, and a button that
     # errors when pressed is worse than no button - see workable().
     usable = workable([[o["numeral"] for o in options] for options in found],
-                      melody, key, profile)
+                      melody, key, profile, cache=voicing_cache)
     found = [[o for o in options if o["numeral"] in keep]
              for options, keep in zip(found, usable)]
 
@@ -103,7 +109,7 @@ def candidates_payload(request: dict) -> dict:
     return {
         "ok": True,
         "suggested": suggest([[o["numeral"] for o in n["options"]] for n in notes],
-                             key, melody, profile),
+                             key, melody, profile, cache=voicing_cache),
         "notes": notes,
     }
 

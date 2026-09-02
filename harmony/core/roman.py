@@ -66,16 +66,6 @@ class ChordSpec:
     aug6_upper_pc: PitchClass | None = None
 
     @property
-    def tendency_tones(self) -> list[PitchClass]:
-        """Tones owing a resolution, and therefore never to be doubled."""
-        out = []
-        for pc in (self.leading_tone_pc, self.seventh_pc,
-                   self.aug6_lower_pc, self.aug6_upper_pc):
-            if pc is not None and pc not in out:
-                out.append(pc)
-        return out
-
-    @property
     def chroma_set(self) -> set[int]:
         return {pc.chroma for pc in self.pitch_classes}
 
@@ -257,9 +247,12 @@ def _parse_simple(token: str, key: Key, allow_chromatic: bool = False) -> ChordS
             seventh_semitones = 10           # half diminished
         else:
             # Diatonic: whatever the scale puts a seventh above this root.
+            # seventh_degree lands on 7 only when this chord's own degree is
+            # 1 - I7/i7, which has no dominant function - so the seventh
+            # here is never the raised leading tone, only ever the natural
+            # scale degree 7 the mode already supplies.
             seventh_degree = (degree + 5) % 7 + 1
-            seventh_raised = key.mode == "minor" and seventh_degree == 7 and not is_upper
-            diatonic = key.scale_degree(seventh_degree, raised=seventh_raised)
+            diatonic = key.scale_degree(seventh_degree)
             root_chroma = LETTER_SEMITONES[root_pc.letter] + root_pc.alteration
             seventh_semitones = (diatonic.chroma - root_chroma) % 12
         seventh_pc = _build_tone(root_pc, 6, seventh_semitones)

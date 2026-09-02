@@ -7,6 +7,7 @@ partly pinned.
 """
 
 import unittest
+from unittest import mock
 
 from harmony.core.checker import check, errors_only
 from harmony.core.key import Key
@@ -66,6 +67,58 @@ class TestPartlyPinnedMelody(unittest.TestCase):
         self.assertTrue(payload["ok"])
         self.assertEqual([n["note"] for n in payload["notes"]], ["E5", "_", "D5"])
         self.assertEqual(payload["notes"][1]["options"], [])
+
+    def test_a_hole_does_not_break_pruning_at_the_other_notes(self):
+        """The bug: any hole collapsed workable()'s pruning for every note.
+
+        With the hole filled in, note 2 prunes to ['i']. With it left as a
+        hole, that pruning must survive - only the hole's own (unopinionated,
+        note-free) slot is exempt from having a real answer.
+        """
+        with_note = candidates_payload(
+            {"key": "c minor", "soprano": "C4 C4 C4 Ab4", "profile": "strict"})
+        with_hole = candidates_payload(
+            {"key": "c minor", "soprano": "_ C4 C4 Ab4", "profile": "strict"})
+        numerals = lambda notes, i: [o["numeral"] for o in notes[i]["options"]]
+        self.assertEqual(numerals(with_hole["notes"], 1), numerals(with_note["notes"], 1))
+        self.assertEqual(numerals(with_hole["notes"], 2), numerals(with_note["notes"], 2))
+
+    def test_a_hole_does_not_break_the_phrase_level_suggestion(self):
+        """The bug: any hole collapsed suggest() to the naive first-choice
+        answer it exists to avoid - here, an empty string at the hole and
+        the degenerate i-i-ii-i pattern everywhere else.
+        """
+        suggested = candidates_payload(
+            {"key": "c minor", "soprano": "C4 _ Eb4 D4 C4", "profile": "strict"})["suggested"]
+        self.assertNotIn("", suggested)
+        self.assertNotEqual(suggested, ["i", "i", "i", "ii°6", "i"])
+        self.assertIn(suggested[-1], ("i", "i6"))
+
+    def test_workable_and_suggest_share_generate_between_them(self):
+        """The redundancy: workable() and suggest() used to redo the same
+        (note index, chord) -> voicings search independently.
+
+        candidates_payload now hands both one cache, so a (index, token)
+        pair generate() has already answered for workable() is not asked
+        again for suggest() - it's reused, not recomputed.
+        """
+        import harmony.core.melody as melody_mod
+        real_generate = melody_mod.generate
+        calls = []
+
+        def counting(spec, key, profile, soprano=None):
+            calls.append((spec.numeral, soprano))
+            return real_generate(spec, key, profile, soprano=soprano)
+
+        with mock.patch.object(melody_mod, "generate", counting):
+            # No repeated note: a (chord, note) pair repeating for a
+            # legitimate reason (the same note recurring) would otherwise
+            # be indistinguishable here from the redundancy under test.
+            payload = candidates_payload(
+                {"key": "C major", "soprano": "C4 D4 E4 F4 G4", "profile": "strict"})
+        self.assertTrue(payload["ok"])
+        self.assertEqual(len(calls), len(set(calls)),
+                         f"generate() was asked the same (chord, note) question twice: {calls}")
 
 
 class TestMidiExport(unittest.TestCase):
