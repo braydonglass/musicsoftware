@@ -250,6 +250,10 @@
   .v-bass    .head, .v-bass .acc    { fill: var(--v-bass); }
   .v-bass    .stem                  { stroke: var(--v-bass); }
 
+  /* The seam between a shared head's colour bands - the staff's own
+     background, so it reads as a gap rather than a third colour. */
+  .unison-divider { stroke: var(--recess); stroke-width: 1.4; }
+
   .masthead {
     display: flex; align-items: baseline; gap: 12px;
     font-size: 10px; color: var(--ink-faint); letter-spacing: .1em;
@@ -414,7 +418,15 @@
     padding-bottom: 2px;
   }
   .transport .chips { margin-left: auto; }
-  .prog-actions { display: flex; gap: 6px; margin-top: 7px; }
+  /* The three staff-level toggles and the soprano box they can open, tucked
+     under the bottom-right corner of the staff rather than the progression
+     field - they act on the staff, not on the text you type into it. */
+  .staff-controls {
+    display: flex; flex-direction: column; align-items: flex-end; gap: 7px;
+  }
+  .staff-actions { display: flex; gap: 6px; }
+  .staff-controls #sopranoField { width: min(280px, 100%); }
+  .staff-controls #sopranoField input { width: 100%; }
   .field label.stacked { margin-top: 12px; }
   /* Which key the held tune is in. The notes alone do not say: E-flat F G
      is a minor melody and F G A a major one, and once the soprano is
@@ -483,6 +495,22 @@
     <div id="busy" role="status" aria-live="polite"><span class="spinner"></span>working</div>
   </div>
 
+  <div class="staff-controls">
+    <div class="staff-actions">
+      <button id="keep"
+              title="Work from a fixed melody. The box appears, the tune stays put, and only new chords are left to the engine.">Keep soprano</button>
+      <button id="figuresOn" title="Show embellishments, and the menu for them">Embellishments</button>
+      <button id="intervals" title="Draw every interval and label it">Intervals</button>
+    </div>
+
+    <div class="field" id="sopranoField" hidden>
+      <label for="soprano">Soprano<span
+        class="held-key" id="heldKey"></span></label>
+      <input id="soprano" spellcheck="false"
+             placeholder="E5 F5 D5 C5">
+    </div>
+  </div>
+
   <div class="transport">
     <button class="primary" id="go">Realize</button>
     <button id="play" disabled>Play</button>
@@ -518,19 +546,6 @@
       <input id="prog" value="" spellcheck="false"
              placeholder="I IV V I  ·  i N6 V i  ·  i iv Ger+6 V  ·  I V/V V I">
       <div class="inserts" id="inserts"></div>
-      <div class="prog-actions">
-        <button id="keep"
-                title="Work from a fixed melody. The box appears, the tune stays put, and only new chords are left to the engine.">Keep soprano</button>
-        <button id="figuresOn" title="Show embellishments, and the menu for them">Embellishments</button>
-        <button id="intervals" title="Draw every interval and label it">Intervals</button>
-      </div>
-
-      <div id="sopranoField" hidden>
-        <label for="soprano" class="stacked">Soprano<span
-          class="held-key" id="heldKey"></span></label>
-        <input id="soprano" spellcheck="false"
-               placeholder="E5 F5 D5 C5">
-      </div>
     </div>
 
     <div class="field" id="figureField" hidden>
@@ -1191,8 +1206,39 @@ window.HARMONY_SOURCES = {
     return out;
   }
 
+  var HEAD_RX = 7.4, HEAD_RY = 5.5, HEAD_ROT = -21;
+
   function draw(payload, resultIndex) {
     while (score.firstChild) score.removeChild(score.firstChild);
+    var clipSeq = 0;
+
+    /* A note two voices share is one sound, so it keeps one head - but the
+       head still owes the ear both colours, since two voices are singing
+       it. Each band gets its own <g class="v-name"> wrapper so it picks up
+       that voice's colour the same way a stem does, clipped to its slice
+       of the same ellipse. A thin line in the staff's own background colour
+       seams the bands apart - the "shared" cue, where a single flat colour
+       would read as just one voice. */
+    function splitHead(nx, y, mates) {
+      var n = mates.length, bandH = (HEAD_RY * 2) / n;
+      mates.forEach(function (voiceName, i) {
+        var top = y - HEAD_RY + i * bandH - (i === 0 ? 4 : 0);
+        var bottom = y - HEAD_RY + (i + 1) * bandH + (i === n - 1 ? 4 : 0);
+        var clipId = "unison-clip-" + (clipSeq++);
+        var clip = el("clipPath", { id: clipId, clipPathUnits: "userSpaceOnUse" });
+        clip.appendChild(el("rect", { x: nx - HEAD_RX - 12, y: top,
+          width: (HEAD_RX + 12) * 2, height: bottom - top }));
+        score.appendChild(clip);
+        var band = el("g", { "class": "v-" + voiceName, "clip-path": "url(#" + clipId + ")" });
+        band.appendChild(el("ellipse", { "class": "head", cx: nx, cy: y,
+          rx: HEAD_RX, ry: HEAD_RY, transform: "rotate(" + HEAD_ROT + " " + nx + " " + y + ")" }));
+        score.appendChild(band);
+      });
+      for (var i = 1; i < n; i++) {
+        var dy = y - HEAD_RY + i * bandH;
+        score.appendChild(line(nx - HEAD_RX - 1, dy, nx + HEAD_RX + 1, dy, "unison-divider"));
+      }
+    }
     if (!payload || !payload.ok) {
       score.setAttribute("width", 420);
       score.setAttribute("height", 300);
@@ -1294,11 +1340,12 @@ window.HARMONY_SOURCES = {
          A decorated note never merges. Its head is the click target that
          takes the figure away again, and folding it into another voice's
          head would take that away with it. */
-      var owner = {}, placed = {};
+      var owner = {}, mates = {}, placed = {};
       which.forEach(function (name) {
         if ((passing || []).indexOf(name) >= 0) return;
         var key = voices[name].name;
         if (!(key in owner)) owner[key] = name;      // which runs soprano first
+        (mates[key] = mates[key] || []).push(name);
       });
 
       var seen = {};
@@ -1344,12 +1391,22 @@ window.HARMONY_SOURCES = {
                                   y, ACC_SCALE, "acc"));
         }
         if (!shared) {
-          group.appendChild(el("ellipse", { "class": "head", cx: nx, cy: y,
-            rx: 7.4, ry: 5.5, transform: "rotate(-21 " + nx + " " + y + ")" }));
+          var sharing = mates[note.name];
+          if (sharing && sharing.length > 1) {
+            splitHead(nx, y, sharing);
+          } else {
+            group.appendChild(el("ellipse", { "class": "head", cx: nx, cy: y,
+              rx: HEAD_RX, ry: HEAD_RY, transform: "rotate(" + HEAD_ROT + " " + nx + " " + y + ")" }));
+          }
         }
-        group.appendChild(STEM_UP[name]
-          ? line(nx + 6.8, y - 1.6, nx + 6.8, y - STEM, "stem")
-          : line(nx - 6.8, y + 1.6, nx - 6.8, y + STEM, "stem"));
+        /* The interval overlay draws its own lines between noteheads: a stem
+           running through them is one more line the eye has to subtract to
+           read the interval, so stems stand down while it is on. */
+        if (!showIntervals) {
+          group.appendChild(STEM_UP[name]
+            ? line(nx + 6.8, y - 1.6, nx + 6.8, y - STEM, "stem")
+            : line(nx - 6.8, y + 1.6, nx - 6.8, y + STEM, "stem"));
+        }
       });
     }
 
