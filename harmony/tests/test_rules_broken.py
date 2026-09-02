@@ -377,6 +377,22 @@ class BrokenCorpus(unittest.TestCase):
         errs = errors_only(check(stepped, specs, key, self.profile))
         self.assertNotIn("leading_tone_resolution", [e.rule_id for e in errs])
 
+    def test_a_leading_tone_may_leap_away_when_the_next_chord_has_no_tonic(self):
+        """Resolution asks for a tone the next chord does not offer.
+
+        vii°7 -> iii is the first step of a descending-fifths sequence.
+        iii is E-G-B: no C anywhere in it, so demanding the bass rise to C
+        asks it to land outside the chord it is actually moving to. There is
+        no tonic to resolve into, so leaping away from it is not a fault.
+        """
+        key = Key.parse("C major")
+        specs = parse_progression("vii°7 iii", key)
+        # bass leaps B2 -> E3, the root of iii - not a step up to C
+        voicings = [voicing("Ab4", "D4", "F3", "B2"),
+                    voicing("G4", "B3", "G3", "E3")]
+        errs = errors_only(check(voicings, specs, key, self.profile))
+        self.assertNotIn("leading_tone_resolution", [e.rule_id for e in errs])
+
 
 class WaivedFaultsMayBePriced(unittest.TestCase):
     """An excused fault is free only if the profile says it is.

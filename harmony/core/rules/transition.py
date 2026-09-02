@@ -382,6 +382,11 @@ def leading_tone_resolution(ctx: TransitionContext) -> list[Violation]:
         return []
 
     tonic = spec.resolution_root_pc or ctx.key.tonic
+    # The demand is "rise to this chord's tonic." If the chord actually
+    # written next does not contain that tone at all, there is nothing to
+    # rise into - not a frustrated resolution, just a different chord.
+    if tonic not in ctx.spec_b.pitch_classes:
+        return []
     outer = ctx.profile.param("leading_tone_outer_voices", ["soprano", "bass"])
     # A secondary dominant commits every voice at once: the applied leading
     # tone must rise and the seventh must fall, and honouring both is what
