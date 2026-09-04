@@ -146,6 +146,24 @@ def _voicings(cache, index, token, spec, key, profile, note):
     return cache[key_]
 
 
+def _fillable(index, key, profile, cache):
+    """Vocabulary chords that can be voiced with nothing fixed above them.
+
+    parse() is guarded here for the same reason it is guarded everywhere
+    else a vocabulary token is read: a token the vocabulary offers and this
+    key cannot spell is a chord that does not exist, not a crash.
+    """
+    out = []
+    for token in vocabulary_for(key):
+        try:
+            spec = parse(token, key)
+        except (RomanNumeralError, ValueError):
+            continue
+        if _voicings(cache, index, token, spec, key, profile, None):
+            out.append(token)
+    return out
+
+
 def _layers(options, melody, key, profile, cache=None):
     """Every (chord, spec, voicing) the melody allows, note by note.
 
@@ -260,12 +278,9 @@ def suggest(options: list[list[str]], key: Key,
     if cache is None:
         cache = {}
     if melody is not None and profile is not None:
-        options = [
-            choices if melody[index] is not None else
-            [token for token in vocabulary_for(key)
-             if _voicings(cache, index, token, parse(token, key), key, profile, None)]
-            for index, choices in enumerate(options)
-        ]
+        options = [choices if melody[index] is not None
+                   else _fillable(index, key, profile, cache)
+                   for index, choices in enumerate(options)]
 
     if not options or any(not choices for choices in options):
         return [choices[0] if choices else "" for choices in options]

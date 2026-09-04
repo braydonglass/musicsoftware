@@ -38,6 +38,14 @@ class Key:
         name, symbols, mode = match.groups()
         alteration = symbols.count("#") + symbols.count("♯") \
             - symbols.count("b") - symbols.count("♭")
+        # Same bound Pitch.parse enforces. Nothing is spelled with a triple
+        # sharp, and without a bound every distinct string is a distinct Key,
+        # each of which the signature cache would then hold a slot for.
+        if abs(alteration) > 2:
+            raise ValueError(
+                f"cannot read {text!r} as a key; no key carries more than a "
+                f"double sharp or double flat"
+            )
         return cls(LETTER_NAMES.index(name.upper()), alteration, mode.lower())
 
     @property
@@ -81,19 +89,29 @@ class Key:
         """Scale degree 7, raised in minor. The tone rules 4a and 8 care about."""
         return self.scale_degree(7, raised=(self.mode == "minor"))
 
-    @lru_cache(maxsize=None)
-    def signature(self) -> dict[int, int]:
-        """Letter -> alteration, as the key signature spells it.
+    @lru_cache(maxsize=128)
+    def _signature(self) -> dict[int, int]:
+        """The cached mapping, shared. Callers must not mutate it.
 
-        Minor uses the natural form, so the raised seventh reads as an
-        accidental rather than as part of the key. Cached: is_altered()
-        calls this once per pitch class checked, from inside the solver's
-        innermost voicing loop, and it is invariant for a given Key.
+        Bounded rather than unbounded: the cache is keyed on the Key, which
+        is hashable and never freed while it sits in the cache, so an
+        unbounded one would retain every key ever parsed for the life of the
+        process. Thirty keys are ever written; 128 slots covers them all.
         """
         return {
             self.scale_degree(n).letter: self.scale_degree(n).alteration
             for n in range(1, 8)
         }
+
+    def signature(self) -> dict[int, int]:
+        """Letter -> alteration, as the key signature spells it.
+
+        Minor uses the natural form, so the raised seventh reads as an
+        accidental rather than as part of the key. A fresh dict each call,
+        so a caller that edits what it is handed cannot corrupt every other
+        Key that compares equal to this one.
+        """
+        return dict(self._signature())
 
     def is_leading_tone(self, pitch: Pitch | PitchClass) -> bool:
         pc = pitch.pitch_class if isinstance(pitch, Pitch) else pitch
@@ -102,7 +120,9 @@ class Key:
     def is_altered(self, pitch: Pitch | PitchClass) -> bool:
         """True when the pitch is chromatically inflected against the signature."""
         pc = pitch.pitch_class if isinstance(pitch, Pitch) else pitch
-        return pc.alteration != self.signature()[pc.letter]
+        # The cached mapping directly: this runs in the solver's innermost
+        # loop and only reads.
+        return pc.alteration != self._signature()[pc.letter]
 
     def __str__(self) -> str:
         return f"{self.tonic} {self.mode}"

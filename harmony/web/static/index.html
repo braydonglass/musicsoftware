@@ -1690,8 +1690,11 @@
     var waived = payload.results[currentIndex].exceptions || [];
     if (!waived.length) return;
     var heading = document.createElement("div");
+    // Not all of these were chosen: a waived rule was broken on purpose,
+    // while a priced warning was broken because every alternative was
+    // worse. What they share is that the engine knew and can say why.
     heading.innerHTML = "<b>" + waived.length + " rule" +
-      (waived.length > 1 ? "s" : "") + " broken on purpose</b>";
+      (waived.length > 1 ? "s" : "") + " broken with a reason</b>";
     box.appendChild(heading);
     waived.forEach(function (item) {
       var line = document.createElement("div");
