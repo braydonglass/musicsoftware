@@ -6,6 +6,7 @@ the refusals with the rule that caused them, and a melody that is only
 partly pinned.
 """
 
+import json
 import unittest
 from unittest import mock
 
@@ -15,7 +16,8 @@ from harmony.core.melody import parse_soprano, transpose
 from harmony.core.roman import parse_progression
 from harmony.core.rules.registry import Profile
 from harmony.core.solver import NoRealization, solve
-from harmony.web.server import candidates_payload, midi_for, realize_payload
+from harmony.web.server import (PRELUDE_FORM_LIST, PRELUDE_RUNGS,
+                                candidates_payload, midi_for, realize_payload)
 
 
 class TestOpportunitiesInThePayload(unittest.TestCase):
@@ -148,6 +150,111 @@ class TestMidiExport(unittest.TestCase):
         plain, _ = midi_for(dict(self.BASE))
         stale, _ = midi_for(dict(self.BASE, figures="0:soprano:passing:Z9"))
         self.assertEqual(plain, stale)
+
+
+class TestThePreludeInThePayload(unittest.TestCase):
+    """Every form travels with the realization, so the picker costs nothing.
+
+    Working a figure out is arithmetic over a few hundred notes; solving the
+    progression again to answer a button press is not. Sending them all is
+    what lets the page switch between them without a round trip - and sending
+    them as numbers against one shared ladder is what keeps that affordable
+    once there are a dozen of them.
+    """
+
+    def setUp(self):
+        self.payload = realize_payload("C major", "I vi IV V I", "strict", 1)
+        self.prelude = self.payload["results"][0]["prelude"]
+
+    def test_the_page_is_told_which_forms_exist(self):
+        listed = [form["id"] for form in self.payload["preludeForms"]]
+        self.assertEqual(listed, [form.id for form in PRELUDE_FORM_LIST])
+        self.assertTrue(all(form["label"] for form in self.payload["preludeForms"]))
+
+    def test_every_result_carries_every_form(self):
+        for result in self.payload["results"]:
+            for form in PRELUDE_FORM_LIST:
+                figure = result["prelude"]["forms"][form.id]
+                self.assertTrue(figure["notes"])
+                self.assertEqual(
+                    len(set(note[0] for note in figure["notes"])),
+                    len(result["chords"]))
+
+    def test_one_ladder_per_chord_serves_every_form(self):
+        ladders = self.prelude["ladders"]
+        self.assertEqual(len(ladders), len(self.payload["results"][0]["chords"]))
+        for rungs in ladders:
+            self.assertEqual(len(rungs), PRELUDE_RUNGS)
+            # spelled, ascending, and no two rungs on one key
+            self.assertEqual([r["midi"] for r in rungs],
+                             sorted(set(r["midi"] for r in rungs)))
+            for rung in rungs:
+                for field in ("name", "midi", "letter", "octave",
+                              "alteration", "accidental"):
+                    self.assertIn(field, rung)
+
+    def test_a_note_is_four_numbers_and_every_one_of_them_resolves(self):
+        chords = len(self.payload["results"][0]["chords"])
+        for form in PRELUDE_FORM_LIST:
+            figure = self.prelude["forms"][form.id]
+            for note in figure["notes"]:
+                self.assertEqual(len(note), 4)
+                chord, rung, start, beats = note
+                self.assertTrue(0 <= chord < chords)
+                self.assertTrue(0 <= rung < PRELUDE_RUNGS)
+                self.assertGreaterEqual(start, chord * figure["beatsPerMeasure"])
+                self.assertGreater(beats, 0)
+
+    def test_the_forms_carry_their_own_meters(self):
+        meters = {form.id: self.prelude["forms"][form.id]["meter"]
+                  for form in PRELUDE_FORM_LIST}
+        self.assertEqual(meters["waltz"], "3/4")
+        self.assertEqual(meters["moonlight"], "12/8")
+        self.assertEqual(meters["boom-chick"], "2/4")
+        # and the realization itself is still in four
+        self.assertEqual(self.payload["meter"], "4/4")
+
+    def test_the_figure_never_dips_below_what_was_realized(self):
+        result = self.payload["results"][0]
+        for form in PRELUDE_FORM_LIST:
+            for note in result["prelude"]["forms"][form.id]["notes"]:
+                written = result["chords"][note[0]]
+                lowest = min(voice["midi"] for voice in written.values())
+                self.assertGreaterEqual(
+                    result["prelude"]["ladders"][note[0]][note[1]]["midi"],
+                    lowest)
+
+    def test_it_stays_small_enough_to_send(self):
+        """A dozen forms of spelled-out notes ran past a megabyte."""
+        big = realize_payload("C major", "I vi ii V7 iii vi IV V I",
+                              "strict", 5)
+        self.assertLess(len(json.dumps(big)), 400 * 1024)
+
+
+class TestThePreludeExport(unittest.TestCase):
+    BASE = {"key": "C major", "progression": "I vi IV V I", "profile": "strict"}
+
+    def test_a_form_changes_the_file(self):
+        plain, _ = midi_for(dict(self.BASE))
+        figured, _ = midi_for(dict(self.BASE, form="bach-c"))
+        self.assertNotEqual(plain, figured)
+        self.assertGreater(len(figured), len(plain))
+
+    def test_every_form_writes_a_file(self):
+        for form in PRELUDE_FORM_LIST:
+            data, _ = midi_for(dict(self.BASE, form=form.id))
+            self.assertTrue(data.startswith(b"MThd"))
+            at = data.index(b"\xFF\x58\x04")
+            self.assertEqual(data[at + 3], form.meter[0])
+
+    def test_the_form_is_in_the_name(self):
+        _, stem = midi_for(dict(self.BASE, form="waltz"))
+        self.assertEqual(stem, "c-major-i-vi-iv-v-i-waltz")
+
+    def test_an_unknown_form_falls_back_rather_than_failing(self):
+        plain, _ = midi_for(dict(self.BASE))
+        odd, _ = midi_for(dict(self.BASE, form="nocturne-in-b"))
+        self.assertEqual(plain, odd)
 
 
 class WhatIsWrittenIsOffered(unittest.TestCase):

@@ -4,8 +4,9 @@ Stdlib only, to keep the package dependency-free. Swapping in Flask would
 touch this file and nothing else.
 
 No rule logic lives here. This module parses a request, calls the same
-functions the CLI calls, and serialises what comes back. Meter is fixed at
-4/4 and never shown, because the engine stores it and the rules never see it.
+functions the CLI calls, and serialises what comes back. Meter is 4/4 for a
+plain realization and never shown, because the engine stores it and the rules
+never see it; a prelude form carries its own, since a waltz is in three.
 """
 
 from __future__ import annotations
@@ -24,7 +25,12 @@ from ..core.embellish import opportunities
 from ..core.key import Key
 from ..core.melody import (HOLE, candidates_for, parse_soprano, suggest,
                            transpose, vocabulary_for, workable)
+from ..core.midi import encode as midi_encode
 from ..core.midi import to_bytes as midi_bytes
+from ..core.prelude import BY_ID as PRELUDE_FORMS
+from ..core.prelude import FORMS as PRELUDE_FORM_LIST
+from ..core.prelude import figurate, ladder_for
+from ..core.prelude import spans as prelude_spans
 from ..core.roman import RomanNumeralError, parse_progression
 from ..core.roman import parse as parse_roman
 from ..core.rules.registry import PROFILE_DIR, Profile
@@ -41,7 +47,16 @@ def _build_stamp() -> str:
     import datetime
     newest = max(p.stat().st_mtime for p in CORE.rglob("*.py"))
     return datetime.datetime.fromtimestamp(newest).strftime("%H:%M:%S")
-FIXED_METER = (4, 4)
+DEFAULT_METER = (4, 4)
+
+
+# One ladder serves every form, so it is built as tall as the tallest needs.
+PRELUDE_RUNGS = max(form.rungs for form in PRELUDE_FORM_LIST)
+
+
+def _meter_for(form_id: str | None) -> tuple[int, int]:
+    form = PRELUDE_FORMS.get(form_id or "")
+    return form.meter if form else DEFAULT_METER
 
 
 def _note(pitch, key) -> dict:
@@ -159,13 +174,23 @@ def midi_for(params: dict) -> tuple[bytes, str]:
 
     results = solve(specs, key, profile, k=index + 1, soprano=melody)
     result = results[min(index, len(results) - 1)]
-    events, _ = place_figures(result.voicings, result.specs or specs, key, profile,
-                              parse_figures(params.get("figures") or ""))
+    used = result.specs or specs
+    tempo = float(params.get("tempo") or 84)
 
-    data = midi_bytes(events, tempo_bpm=float(params.get("tempo") or 84),
-                      meter=FIXED_METER)
-    stem = re.sub(r"[^A-Za-z0-9]+", "-",
-                  f"{key} {progression}").strip("-").lower() or "harmony"
+    # A prelude replaces the chords rather than decorating them, so it takes
+    # the whole export: the figure runs off the block voicings, and the
+    # embellishments chosen for the block view have nothing to attach to.
+    form = PRELUDE_FORMS.get((params.get("form") or "").strip())
+    if form is not None:
+        data = midi_encode(prelude_spans(figurate(result.voicings, used, form)),
+                           tempo_bpm=tempo, meter=form.meter)
+    else:
+        events, _ = place_figures(result.voicings, used, key, profile,
+                                  parse_figures(params.get("figures") or ""))
+        data = midi_bytes(events, tempo_bpm=tempo, meter=DEFAULT_METER)
+
+    name = f"{key} {progression}" + (f" {form.id}" if form else "")
+    stem = re.sub(r"[^A-Za-z0-9]+", "-", name).strip("-").lower() or "harmony"
     return data, stem
 
 
@@ -239,6 +264,33 @@ def realize_payload(key_text: str, progression: str, profile_name: str,
                  "slot": o.slot, "refusedBy": o.refused_by}
                 for o in refused
             ],
+            # Every form, on every result, computed up front. Figurating a
+            # solved realization is arithmetic over a few hundred notes,
+            # where re-solving to answer a button press is the expensive
+            # thing. Sending them all is what makes the picker instant.
+            #
+            # A note is four numbers, not an object: which chord, which rung,
+            # when, how long. What pitch that is comes from the ladder, which
+            # every form shares because every form climbs the same one. Spelt
+            # out per note per form the payload ran past a megabyte on a long
+            # progression with alternates; this way it is a few tens of KB,
+            # and nothing about the figure moved into the page to get there.
+            "prelude": {
+                "ladders": [
+                    [_note(p, key) for p in ladder_for(v, sp, PRELUDE_RUNGS)]
+                    for v, sp in zip(result.voicings, used)
+                ],
+                "forms": {
+                    form.id: {
+                        "meter": f"{form.meter[0]}/{form.meter[1]}",
+                        "beatsPerMeasure": form.beats_per_measure,
+                        "unit": form.unit,
+                        "notes": [[n.chord, n.rung, n.start, n.beats]
+                                  for n in figurate(result.voicings, used, form)],
+                    }
+                    for form in PRELUDE_FORM_LIST
+                },
+            },
         })
 
     signature = key.signature()
@@ -252,7 +304,10 @@ def realize_payload(key_text: str, progression: str, profile_name: str,
             "kind": "sharp" if sharps else ("flat" if flats else None),
             "count": sharps or flats,
         },
-        "meter": f"{FIXED_METER[0]}/{FIXED_METER[1]}",
+        "meter": f"{DEFAULT_METER[0]}/{DEFAULT_METER[1]}",
+        "preludeForms": [{"id": f.id, "label": f.label,
+                          "meter": f"{f.meter[0]}/{f.meter[1]}"}
+                         for f in PRELUDE_FORM_LIST],
         "profile": profile.name,
         "numerals": [s.numeral for s in specs],
         "sopranoFixed": bool(melody),

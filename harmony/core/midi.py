@@ -11,6 +11,10 @@ event list a decorated realization produces, where a beat may be split. It
 schedules per voice rather than per chord, because a voice holding through
 a split beat must sound once - striking it again turns every decorated
 chord into a pair of block eighth notes.
+
+Keyboard figuration takes the other door. ``prelude`` hands ``encode`` a
+flat list of spans, because an arpeggio is one note at a time and has no
+voices to schedule.
 """
 
 from __future__ import annotations
@@ -82,18 +86,23 @@ def timeline(events) -> list[tuple[float, float, int]]:
     return out
 
 
-def to_bytes(
-    items,
+def encode(
+    spans,
     tempo_bpm: float = 84.0,
-    beats_per_chord: int = 1,
     meter: tuple[int, int] = (4, 4),
     velocity: int = 72,
 ) -> bytes:
-    """Encode a realization - decorated or not - as a type-0 MIDI file."""
-    if not len(items):
+    """Write (start, end, midi) triples, measured in beats, as a type-0 file.
+
+    The two callers reach this by different roads and share the bytes. A
+    realization arrives as voicings or events and is scheduled per voice by
+    ``timeline``; keyboard figuration arrives already flat, because an
+    arpeggio has no voices to schedule. Neither wants its own byte writer.
+    """
+    spans = list(spans)
+    if not spans:
         raise ValueError("nothing to write")
     tempo_bpm = max(20.0, min(float(tempo_bpm), 400.0))
-    events = _as_events(items, beats_per_chord)
 
     out = bytearray()
 
@@ -110,7 +119,7 @@ def to_bytes(
     # within each. Nothing depends on that order musically; it is fixed so
     # the bytes are reproducible.
     scheduled: list[tuple[int, int, int]] = []
-    for start, end, note in timeline(events):
+    for start, end, note in spans:
         scheduled.append((int(round(start * TICKS_PER_BEAT)), 1, note))
         scheduled.append((int(round(end * TICKS_PER_BEAT)), 0, note))
     scheduled.sort()
@@ -126,6 +135,20 @@ def to_bytes(
     track = b"MTrk" + struct.pack(">I", len(out)) + bytes(out)
     header = b"MThd" + struct.pack(">IHHH", 6, 0, 1, TICKS_PER_BEAT)
     return header + track
+
+
+def to_bytes(
+    items,
+    tempo_bpm: float = 84.0,
+    beats_per_chord: int = 1,
+    meter: tuple[int, int] = (4, 4),
+    velocity: int = 72,
+) -> bytes:
+    """Encode a realization - decorated or not - as a type-0 MIDI file."""
+    if not len(items):
+        raise ValueError("nothing to write")
+    return encode(timeline(_as_events(items, beats_per_chord)),
+                  tempo_bpm=tempo_bpm, meter=meter, velocity=velocity)
 
 
 def write(path: str, items, **kwargs) -> None:

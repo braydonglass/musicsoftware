@@ -98,7 +98,7 @@ class Form:
     meter: tuple[int, int]
     unit: float           # beats per pattern step: 0.25 a sixteenth,
                           # 0.5 an eighth
-    pattern: tuple[int, ...]      # ladder rungs, one per step
+    pattern: tuple        # per step, a rung or a tuple of rungs struck together
     sustained: tuple[int, ...]    # pattern positions whose note holds to the
                                   # end of the pattern instead of stopping
                                   # after one step
@@ -107,6 +107,11 @@ class Form:
                                   # outside the pattern
     rungs: int            # how tall the ladder must be
 ```
+
+A step is one rung or several struck at once, and the second kind is what
+separates an accompaniment from an arpeggio. A waltz's second and third beats
+are a chord, not a note, and no reordering of single rungs produces one. On the
+staff a step of several rungs is one column with one stem.
 
 The pattern repeats `beats_per_measure / (unit * len(pattern))` times per
 measure, which is a whole number for every form here.
@@ -124,7 +129,7 @@ measure as many times as the meter needs.
 `spans(notes) -> list[tuple[float, float, int]]` collapses the note list into
 the `(start, end, midi)` triples the encoder already speaks.
 
-### The three forms
+### The forms
 
 **`bach-c` — Bach, Prelude in C.** 4/4, sixteenths, five rungs. The pattern is
 `(0, 1, 2, 3, 4, 2, 3, 4)`, eight steps, played twice per measure. On a
@@ -148,6 +153,23 @@ measure.
 **`waltz` — broken-chord waltz.** 3/4, eighths, four rungs. Pattern
 `(0, 1, 2, 3, 2, 1)`, six steps, once per measure. No sustains, no drone.
 This is the form that forces meter to stop being a constant.
+
+Then nine more, in the same vocabulary:
+
+| id | meter | shape |
+|---|---|---|
+| `rise-fall` | 4/4 | `(0,1,2,3,4,3,2,1)` sixteenths - Bach's rungs, turning back down |
+| `harp` | 4/4 | `(0..7)` sixteenths over an eight-rung ladder, about three octaves |
+| `moonlight` | 12/8 | `(1,2,3)` four times over a droned bass |
+| `nocturne` | 6/8 | `(0,2,3,2,3,2)` with the bass sustained under it |
+| `murky` | 4/4 | `(0,2,0,2)` eighths under a droned melody |
+| `oompah` | 3/4 | `(0, (1,2,3), (1,2,3))` - bass, chord, chord |
+| `stride` | 4/4 | `(0, (2,3), 1, (2,3))` - alternating bass answered by a chord |
+| `boom-chick` | 2/4 | `(0, (1,2,3))` |
+| `pulse` | 4/4 | `((1,2,3),)` eight times over a droned bass |
+
+Twelve in all. The last four are the ones that need a step to strike several
+rungs at once.
 
 ## Meter stops being fixed
 
@@ -173,27 +195,33 @@ signature is unchanged so the CLI and `test_midi` are untouched.
 
 ## The web layer
 
-`realize_payload` computes all three forms for every result and ships them:
+`realize_payload` computes every form for every result and ships them all:
 
 ```json
 "prelude": {
-  "bach-c": {"meter": "4/4", "notes": [{"midi": 48, "name": "C3", "letter": 0,
-                                        "octave": 3, "alteration": 0,
-                                        "start": 0.0, "beats": 2.0,
-                                        "chord": 0, "rung": 0}, ...]},
-  "alberti": {...},
-  "waltz": {...}
+  "ladders": [[{"name": "C3", "midi": 48, "letter": 0, "octave": 3,
+                "alteration": 0, "accidental": false}, ...], ...],
+  "forms": {
+    "bach-c": {"meter": "4/4", "beatsPerMeasure": 4.0, "unit": 0.25,
+               "notes": [[0, 0, 0.0, 2.0], ...]},
+    "moonlight": {...}
+  }
 }
 ```
 
 Computed unconditionally rather than on demand, because figurating a solved
 realization is arithmetic over a few hundred notes while re-solving is the
 expensive thing. Pressing Prelude or changing the form is then instant and
-costs no round trip — which matters, since the last performance complaint on
-this project was about exactly that kind of latency. Size: eight chords, three
-forms, sixteen notes a measure is roughly 25 KB of JSON per result. If
-alternates make that bite, the fallback is to ship only the selected form and
-fetch the others on demand; the shape above does not change.
+costs no round trip - which matters, since the last performance complaint on
+this project was about exactly that kind of latency.
+
+A note is four numbers - chord, rung, start, length - not an object. What
+pitch a rung is comes from `ladders`, one per chord, built as tall as the
+tallest form needs and shared by all of them, because every form climbs the
+same ladder. Spelled out per note per form, twelve forms ran past a megabyte
+on a nine-chord progression with five alternates; this way the same payload is
+under 300 KB, and no part of the figure moved into the page to buy that. The
+page expands a form once, on first use, and keeps it.
 
 `/api/midi` gains an optional `form` parameter. When present, `midi_for`
 figurates before encoding and uses the form's meter. The filename stem gains
@@ -226,30 +254,59 @@ widths. When the prelude is on it renders; when off, `draw()` renders as now.
 
 Layout:
 
-- One measure per chord. Notes per measure comes from the form.
-- Measure width is fixed per form; the number of measures per system is
-  `floor((container width - clef - key signature) / measure width)`, at least
-  one. Measured from `score.parentNode.clientWidth`, recomputed on resize.
+- One measure per chord. Horizontal position is time-driven, not index-driven.
+  How wide a measure has to be is a question about how many times something is
+  struck in it, not how many beats it has - twelve slow eighths need more room
+  than three quarters, and paying out pixels per beat gives the sparse measure
+  the wider one. The width is `max(busiest column count * 19.5, beats * 46)`
+  and the notes are spread across it, which puts a sixteenth at about 18px
+  against a notehead 14.8px wide.
+- Notes struck at the same instant are one column with one stem, taken from
+  the lowest head and passing all of them. Two heads a step apart move to
+  opposite sides of the stem.
+- The number of measures per system is
+  `floor((container width - clef - key signature - time signature) / measure width)`,
+  at least one, measured from `score.parentNode.clientWidth` and recomputed on
+  a debounced resize. The time signature's width is reserved on every system
+  though only the first prints it, so bars line up down the page.
 - Each system is a `<g transform="translate(0, dy)">`. That is how wrapping
   gets done without touching `yOf`'s single origin: the coordinate maths stays
-  identical inside each group and the group is moved.
+  identical inside each group and the group is moved. Every system gets the
+  same height, taken from the whole piece, so the gap between lines does not
+  breathe as the music moves.
 - Clef and key signature are drawn at the start of every system.
 - A barline between measures and at the end of each system. `draw()` has
   exactly two vertical rules today, both outside any loop; the prelude view
   needs them per measure, which is new code, not a reuse.
-- A note lands on the treble staff at middle C and above, the bass staff
-  below. Ledger lines come from the existing `ledgersFor`.
-- Stem direction is per pitch here — down above the middle line of its staff,
-  up below — not per voice. This deliberately diverges from `draw()`'s fixed
-  per-voice rule, which exists there to disambiguate two voices sharing a line
-  and has nothing to disambiguate in a single running line.
-- Beams: group the notes of each beat, draw a `<line class="beam">` joining
-  the stem ends. Sixteenths get two beams, eighths one. Sustained notes are
-  not beamed; they get no flag and no beam and simply run their length.
+- **There is no staff assignment to make.** `yOf` has a single origin for the
+  whole grand staff, so a pitch sits where it sits and no note is ever "put
+  on" the treble or the bass staff. Ledger lines come from the existing
+  `ledgersFor`, which already knows the two-space gap between the staves.
+- Beam groups are one beat of the figure, and are not broken where the figure
+  crosses between the staves — they could hardly be, given the point above,
+  and Bach beams the G below middle C with the two notes above it for the
+  same reason. Sixteenths get two beam lines, eighths one.
+- Stems on the figure always go up, so the beam rides over the run rather than
+  through the chord it is unfolding. A held note takes the ordinary rule — up
+  from below middle C, down from above — which also keeps it clear of the
+  beam. This diverges from `draw()`'s fixed per-voice rule, which exists there
+  to disambiguate two voices sharing a line and has nothing to disambiguate in
+  a single running line.
+- Beams are slanted, following the run, because a flat beam over a two-octave
+  arpeggio leaves the lowest note on a stem half the height of the staff. The
+  slant is capped at three staff spaces, and the whole beam is then lifted
+  until the shortest stem clears 22px. A group of one gets a 13px stub off its
+  stem, which says what a flag would and needs no glyph.
+- A held note is drawn with an open head. It is the only duration distinction
+  on the page — there is no half-note glyph and no augmentation dot — and it
+  is enough to read the note as long.
 - Time signature: `<text>` digits, not path glyphs. There is no digit glyph in
   the file and `<text>` is already used for voice names, so this adds no new
   path data. It is drawn once, on the first system.
 - Highlighting on playback stays per chord, which is now per measure.
+- Below about 460px of window the view can no longer wrap — one bar of
+  sixteenths is already wider than that — so sideways scrolling stays
+  available as a floor rather than being clipped away.
 
 ## Playback
 
@@ -290,8 +347,10 @@ triggers a re-solve.
 `test_midi.py`: a prelude note list through `encode` yields the right tick
 count, and `waltz` writes 3/4 into the time-signature bytes.
 
-`test_web.py`: `/api/realize` carries a `prelude` block with all three forms;
-`/api/midi?form=waltz` returns a file whose header parses.
+`test_web.py`: `/api/realize` carries a `prelude` block with every form and a
+ladder per chord; each of the four numbers in a note resolves; every form
+exports a file whose time signature matches its meter; and a nine-chord
+progression with five alternates stays under 400 KB.
 
 `test_static_build.py` passes after `python3 tools/build_static.py`.
 
@@ -302,3 +361,29 @@ half-measure as Bach engraves them. Repeats, pedal marks, dynamics. A tempo
 that varies with the form. Figuration of embellished events — the prelude
 reads the block voicings, not the decorated ones, and the Embellishments
 toggle has no effect while it is on.
+
+## Transport
+
+Play, pause and stop, drawn as paths rather than typed as Unicode characters,
+which render as colour emoji on most systems and cannot take the colour the
+button is in.
+
+Stop needed a fix that was not about the prelude at all. Every note of a run
+is handed to the audio graph the moment Play is pressed, scheduled minutes
+ahead if the piece is long, so clearing the timers stopped the highlight
+moving and nothing else - the sound kept arriving. Each run now passes through
+its own gain node, and stopping ramps that to zero over 40ms and disconnects
+it.
+
+Pause holds its place in beats and Play resumes from there. A note the resume
+lands inside starts at once and runs out its remainder rather than being
+dropped, so a held bass does not vanish for the rest of the measure it is
+resumed into, and that measure is lit immediately instead of at the next one.
+Pausing on the final note counts as finishing, not pausing.
+
+Anything that changes the music underneath a held place - a re-realization, a
+different alternate, turning the prelude on or off - stops rather than pauses.
+
+The three staff toggles and the prelude are disabled until a realization
+exists, and go out with it: there is nothing to decorate, measure or figurate
+before there are chords.

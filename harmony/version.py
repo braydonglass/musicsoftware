@@ -5,5 +5,5 @@ to ask: the page is a single file served from anywhere, and it still has to
 be able to say which version somebody is looking at. Bump both together.
 """
 
-VERSION = "1.2"
-RELEASED = "2026-09-01"
+VERSION = "1.3"
+RELEASED = "2026-09-06"
