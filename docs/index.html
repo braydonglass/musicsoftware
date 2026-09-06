@@ -219,24 +219,43 @@
      before the call goes out rather than after it, which is what painted()
      is for.
 
-     The spinner turns with a transform, which the compositor animates off
-     the main thread. It therefore keeps moving while the engine has that
-     thread locked, and is the only part of the page that can. */
+     Which is also why the sweep moves with a transform rather than by
+     growing: the compositor animates a transform off the main thread, so it
+     keeps going while the engine has that thread locked, and is the only
+     part of the page that can. The determinate fill changes width instead,
+     which needs layout and so needs the thread - but that is only ever set
+     between stages, when the thread is free. */
   #busy {
     position: absolute; inset: 0; display: none; z-index: 2;
-    align-items: center; justify-content: center; gap: 10px;
+    flex-direction: column; align-items: center; justify-content: center; gap: 11px;
     background: rgba(16, 21, 26, .82);
     font-family: var(--mono); font-size: 11px; letter-spacing: .12em;
     text-transform: uppercase; color: var(--amber);
   }
   #busy[data-on] { display: flex; }
-  #busy .spinner {
-    width: 13px; height: 13px; border-radius: 50%;
-    border: 2px solid var(--amber-dim); border-top-color: var(--amber);
-    animation: spin .7s linear infinite;
+  .bar {
+    width: min(260px, 62%); height: 4px; border-radius: 2px;
+    background: var(--amber-dim); overflow: hidden;
   }
-  @keyframes spin { to { transform: rotate(360deg); } }
-  @media (prefers-reduced-motion: reduce) { #busy .spinner { animation: none; } }
+  .bar-fill {
+    height: 100%; width: 0; background: var(--amber);
+    transition: width .18s linear;
+  }
+  .bar-label { opacity: .85; }
+  /* When the work behind the bar cannot say how far along it is, the bar
+     says so by sweeping rather than by inventing a number. A percentage
+     that is not measuring anything is worse than no percentage. */
+  .bar.sweeping .bar-fill {
+    width: 34%; transition: none;
+    animation: sweep 1.1s ease-in-out infinite;
+  }
+  @keyframes sweep {
+    0%   { transform: translateX(-110%); }
+    100% { transform: translateX(320%); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .bar.sweeping .bar-fill { animation: none; width: 100%; opacity: .5; }
+  }
 
   .figure-actions { display: flex; gap: 6px; }
 
@@ -370,6 +389,9 @@
   .icon-btn { padding: 9px 12px; line-height: 0; }
   .icon-btn svg { width: 13px; height: 13px; display: block; }
   .icon-btn svg path, .icon-btn svg rect { fill: currentColor; }
+  .icon-btn svg path.wire {
+    fill: none; stroke: currentColor; stroke-width: 1.9;
+  }
   button:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
 
   /* an anchor, not a button, so it still works where scripted downloads are
@@ -522,7 +544,10 @@
     <div class="score-wrap">
       <svg class="score" id="score" role="img" aria-label="Four-part realization"></svg>
     </div>
-    <div id="busy" role="status" aria-live="polite"><span class="spinner"></span>working</div>
+    <div id="busy" role="status" aria-live="polite">
+      <div class="bar" id="busyBar"><div class="bar-fill" id="busyFill"></div></div>
+      <div class="bar-label" id="busyLabel">working</div>
+    </div>
   </div>
 
   <div class="transport">
@@ -534,6 +559,13 @@
     <button id="stop" class="icon-btn" disabled
             title="Stop" aria-label="Stop">
       <svg viewBox="0 0 20 20" aria-hidden="true"><rect x="5.5" y="5.5" width="9" height="9" rx="1"/></svg>
+    </button>
+    <button id="loop" class="icon-btn" title="Loop" aria-label="Loop"
+            aria-pressed="false">
+      <svg viewBox="0 0 20 20" aria-hidden="true">
+        <path class="wire" d="M7.5 6 H12.5 A3.5 3.5 0 0 1 12.5 13 H7.5 A3.5 3.5 0 0 1 7.5 6 Z"/>
+        <path d="M8.6 3.8 V8.2 L11.7 6 Z"/>
+      </svg>
     </button>
     <a id="export" class="export" href="#" download>Export MIDI</a>
     <button id="reset" class="danger"
@@ -703,31 +735,96 @@ window.HARMONY_SOURCES = {
 (function () {
   "use strict";
 
-  var banner = null;
-  function say(text) {
+  var banner = null, bootBar = null, bootFill = null, bootLabel = null;
+  function say(text, fraction) {
     if (!banner) {
       banner = document.createElement("div");
       banner.id = "booting";
+      bootLabel = document.createElement("div");
+      bootLabel.className = "boot-label";
+      bootBar = document.createElement("div");
+      bootBar.className = "boot-bar";
+      bootFill = document.createElement("div");
+      bootFill.className = "boot-fill";
+      bootBar.appendChild(bootFill);
+      banner.appendChild(bootLabel);
+      banner.appendChild(bootBar);
       document.addEventListener("DOMContentLoaded", function () {
         document.body.appendChild(banner);
       });
     }
-    banner.textContent = text;
+    bootLabel.textContent = text;
+    banner.style.display = text ? "" : "none";
+    if (fraction === null || fraction === undefined) {
+      /* Clear the inline width rather than trusting the class to overrule
+         it: an inline style wins over any stylesheet rule, so a sweep left
+         holding the last determinate value animates a bar of that width -
+         and coming out of the opening 0 that is a bar of no width at all. */
+      bootFill.style.width = "";
+      bootBar.classList.add("sweeping");
+    } else {
+      bootBar.classList.remove("sweeping");
+      bootFill.style.width = (Math.max(0, Math.min(1, fraction)) * 100) + "%";
+    }
   }
-  say("starting the engine\u2026");
+  say("starting the engine\u2026", 0);
+
+  /* Pulling the runtime down is most of the wait, and it is the one part of
+     the boot that can be measured rather than guessed at: the response
+     carries a length and arrives in chunks, so the bar can follow the bytes.
+
+     Fetching it here rather than leaving it to loadPyodide is what makes
+     that possible. The file lands in the HTTP cache, so the loader's own
+     request for it is served from there and nothing is downloaded twice. If
+     any of it fails - no length header, an opaque response, an old browser
+     with no streaming - the bar goes back to sweeping and the boot carries
+     on. A progress bar is not worth breaking a page over.
+
+     The weights below are the four real edges of the boot. They are not
+     equal because the stages are not: the download dominates, and the last
+     two are quick. */
+  var WASM_DONE = 0.72, RUNTIME_DONE = 0.86, FILES_DONE = 0.92;
+
+  async function warmRuntime() {
+    try {
+      var response = await fetch("https://cdn.jsdelivr.net/pyodide/v0.26.4/full/pyodide.asm.wasm");
+      if (!response.ok || !response.body) return;
+      var total = +response.headers.get("Content-Length");
+      var reader = response.body.getReader();
+      var got = 0;
+      for (;;) {
+        var step = await reader.read();
+        if (step.done) break;
+        got += step.value.length;
+        if (total > 0) {
+          say("downloading the runtime\u2026", (got / total) * WASM_DONE);
+        }
+      }
+    } catch (err) {
+      /* nothing to do about it, and nothing that needs doing */
+    }
+  }
 
   var ready = (async function () {
+    say("downloading the runtime\u2026", null);
+    await warmRuntime();
+    say("starting the runtime\u2026", WASM_DONE);
     var py = await loadPyodide({ indexURL: "https://cdn.jsdelivr.net/pyodide/v0.26.4/full/" });
+    say("unpacking the engine\u2026", RUNTIME_DONE);
     /* An explicit root. Relative paths are resolved against a working
        directory that need not exist in the virtual filesystem, which fails
        with a bare ENOENT and no clue as to which file it meant. */
     var files = window.HARMONY_SOURCES;
     py.FS.mkdirTree("/app");
-    Object.keys(files).forEach(function (path) {
+    var names = Object.keys(files);
+    names.forEach(function (path, index) {
       var full = "/app/" + path;
       py.FS.mkdirTree(full.slice(0, full.lastIndexOf("/")));
       py.FS.writeFile(full, files[path]);
+      say("unpacking the engine\u2026",
+          RUNTIME_DONE + (FILES_DONE - RUNTIME_DONE) * ((index + 1) / names.length));
     });
+    say("importing the engine\u2026", FILES_DONE);
     py.runPython([
       "import sys, json, base64",
       "sys.path.insert(0, '/app')",
@@ -772,13 +869,13 @@ window.HARMONY_SOURCES = {
       "    data, stem = midi_for(json.loads(raw))",
       "    return json.dumps({'b64': base64.b64encode(data).decode(), 'stem': stem})",
       ""].join("\n"));
-    say("");
+    say("ready", 1);
     if (banner && banner.parentNode) banner.parentNode.removeChild(banner);
     return py;
   })().catch(function (err) {
     window.__bootError = err;
     var detail = (err && (err.message || err.toString())) || String(err);
-    say("the engine could not start: " + detail);
+    say("the engine could not start: " + detail, 1);
     throw err;
   });
 
@@ -832,8 +929,30 @@ window.HARMONY_SOURCES = {
     font-family: var(--mono); font-size: 12px; color: var(--amber);
     background: var(--panel-deep); border: 1px solid var(--amber-dim);
     border-radius: 3px; padding: 7px 13px; z-index: 9;
+    display: flex; flex-direction: column; gap: 7px; min-width: 232px;
   }
   #booting:empty { display: none; }
+  #booting .boot-bar {
+    height: 4px; border-radius: 2px; background: var(--amber-dim);
+    overflow: hidden;
+  }
+  #booting .boot-fill {
+    height: 100%; width: 0; background: var(--amber);
+    transition: width .12s linear;
+  }
+  /* Sweeping means the stage underway cannot say how far along it is. A
+     percentage measuring nothing is worse than no percentage. */
+  #booting .boot-bar.sweeping .boot-fill {
+    width: 34%; transition: none;
+    animation: bootsweep 1.1s ease-in-out infinite;
+  }
+  @keyframes bootsweep {
+    0%   { transform: translateX(-110%); }
+    100% { transform: translateX(320%); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    #booting .boot-bar.sweeping .boot-fill { animation: none; width: 100%; opacity: .5; }
+  }
 </style>
 
 <script>
@@ -2007,7 +2126,7 @@ window.HARMONY_SOURCES = {
     });
   }
 
-  var playing = false, paused = false, timers = [];
+  var playing = false, paused = false, looping = false, timers = [];
   var bus = null;          // the gain every note of the current run passes
   var playFrom = 0;        // where the next Play starts, in beats
   var playedAt = 0;        // audio clock reading that beat playFrom happened at
@@ -2048,6 +2167,22 @@ window.HARMONY_SOURCES = {
     play.title = label;
     play.setAttribute("aria-label", label);
     stop.disabled = !(playing || paused);
+  }
+
+  function setLoop(on) {
+    looping = !!on;
+    var button = document.getElementById("loop");
+    button.classList.toggle("on", looping);
+    button.setAttribute("aria-pressed", looping ? "true" : "false");
+  }
+
+  /* What happens when the piece runs out. Looping starts it again from the
+     top rather than from wherever a pause left off, because the point of a
+     loop is the whole phrase. Only a run that finished loops: Stop and Pause
+     both come through their own doors. */
+  function finished() {
+    stopPlayback();
+    if (looping && current && current.ok) play();
   }
 
   /* Stop goes back to the beginning. Pause holds the place. The difference
@@ -2188,7 +2323,7 @@ window.HARMONY_SOURCES = {
     // resuming inside a chord lights it at once rather than at the next one
     if (running >= 0) highlight(running);
 
-    timers.push(setTimeout(stopPlayback,
+    timers.push(setTimeout(finished,
       (start - audio.currentTime + (playLength - from) * beat) * 1000 + 120));
   }
 
@@ -2227,11 +2362,46 @@ window.HARMONY_SOURCES = {
      - so the two spans of work overlap, and a flag would clear the overlay
      for a frame in between and then put it straight back. */
   var busy = document.getElementById("busy"), busyDepth = 0;
-  function setBusy(on) {
+  /* The bar moves when something has actually finished, never on a timer.
+
+     Which means it is honest about what it does not know. The page can see
+     the request go out, the answer come back, the staff get drawn and the
+     file get built - four real edges, and it marks them. It cannot see
+     inside the solve, which is the long part: served from Python that is one
+     HTTP round trip with nothing to report until it returns, and built
+     static it is a synchronous call into Pyodide that holds this thread, so
+     even a solver that counted its own chords could not paint the count.
+     For that stretch the bar sweeps instead of claiming a percentage. */
+  function setProgress(fraction, label) {
+    var bar = document.getElementById("busyBar");
+    var fill = document.getElementById("busyFill");
+    if (fraction === null || fraction === undefined) {
+      /* The inline width has to go, not just be overruled. An inline style
+         beats a stylesheet rule whatever the selector, so leaving the last
+         determinate value on the element pins the sweeping bar at that width
+         - and the width it is usually pinned at is the 0 it was set to when
+         the overlay opened. The sweep then animates something with no width,
+         which is a bar that looks broken rather than busy. */
+      fill.style.width = "";
+      bar.classList.add("sweeping");
+    } else {
+      bar.classList.remove("sweeping");
+      var clamped = Math.max(0, Math.min(1, fraction));
+      fill.style.width = (clamped * 100) + "%";
+    }
+    if (label) document.getElementById("busyLabel").textContent = label;
+  }
+
+  function setBusy(on, label) {
     busyDepth = Math.max(0, busyDepth + (on ? 1 : -1));
     var button = document.getElementById("go");
-    if (busyDepth) busy.setAttribute("data-on", "");
-    else busy.removeAttribute("data-on");
+    if (busyDepth) {
+      busy.setAttribute("data-on", "");
+      if (on) setProgress(0, label || "working");
+    } else {
+      busy.removeAttribute("data-on");
+      setProgress(0, "working");
+    }
     button.disabled = busyDepth > 0;
     button.textContent = busyDepth ? "Working\u2026" : "Realize";
   }
@@ -2279,9 +2449,10 @@ window.HARMONY_SOURCES = {
        and making it re-runs the whole search on this thread. That is a
        second freeze immediately after the first, which is why it waits for
        a frame and holds the busy state rather than doing it in silence. */
-    setBusy(true);
+    setBusy(true, "building the file");
     return painted()
       .then(function () {
+        setProgress(null, "building the file");
         return backend.midiUrl({
           key: document.getElementById("key").value,
           progression: document.getElementById("prog").value,
@@ -2468,9 +2639,10 @@ window.HARMONY_SOURCES = {
     var box = document.getElementById("options");
     if (!melody) { box.innerHTML = ""; choices = []; return Promise.resolve(); }
 
-    setBusy(true);
+    setBusy(true, "reading the melody");
     return painted()
       .then(function () {
+        setProgress(null, "finding chords");
         return backend.candidates({
           key: document.getElementById("key").value,
           soprano: melody,
@@ -2579,11 +2751,12 @@ window.HARMONY_SOURCES = {
       setStatus("write a progression, or pick a feeling or a melody", "ok");
       return Promise.resolve();
     }
-    setBusy(true);
+    setBusy(true, "reading the progression");
     setStatus("working…");
 
     return painted()
       .then(function () {
+        setProgress(null, "solving");
         return backend.realize({
           key: document.getElementById("key").value,
           progression: document.getElementById("prog").value,
@@ -2595,6 +2768,7 @@ window.HARMONY_SOURCES = {
         });
       })
       .then(function (payload) {
+        setProgress(0.7, "drawing");
         if (!keepAlternate) currentIndex = 0;
         if (!payload.ok) {
           current = null;
@@ -3307,6 +3481,9 @@ window.HARMONY_SOURCES = {
   });
   document.getElementById("play").addEventListener("click", play);
   document.getElementById("stop").addEventListener("click", stopPlayback);
+  document.getElementById("loop").addEventListener("click", function () {
+    setLoop(!looping);
+  });
   document.getElementById("prog").addEventListener("keydown", function (e) {
     if (e.key === "Enter") realize();
   });
@@ -3349,7 +3526,8 @@ window.HARMONY_SOURCES = {
   function moveMelody(from, to) {
     chosen = {};
     showHeldKey();          // the held tune is in the new key now
-    setBusy(true);
+    setBusy(true, "transposing");
+    setProgress(null, "transposing");
     return backend.transpose({ from: from, to: to, soprano: melodyText(),
                                profile: PROFILE })
       .then(function (answer) {
