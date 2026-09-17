@@ -497,26 +497,67 @@
   .us-right { flex: 1 0 300px; max-width: 460px; min-width: 0; display: flex;
               flex-direction: column; align-items: flex-end; gap: 10px; }
   .us-right .chips { justify-content: flex-end; }
-  .rule-panel { width: 100%; display: flex; flex-direction: column; align-items: flex-end; gap: 10px; }
+  .rule-panel { width: 100%; display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
   .rule-panel:empty { display: none; }
-  .rp-card {
-    width: 100%; background: var(--panel-deep); border: 1px solid var(--panel-edge);
-    border-radius: 6px; padding: 12px 14px;
+
+  /* One box that says at a glance whether anything broke, and opens to say
+     what. It stays dark when the result is clean and lights when it is not:
+     cyan for rules broken with a reason, red for rules simply broken. A new
+     break flashes it once, so a change of alternate that breaks something
+     is noticed without anyone having to open the box to find out. */
+  .rp-box {
+    position: relative; width: 100%; background: var(--panel-deep);
+    border: 1px solid var(--panel-edge); border-radius: 6px;
+    transition: border-color .25s, box-shadow .25s;
   }
+  .rp-head {
+    display: flex; align-items: center; gap: 10px; width: 100%;
+    padding: 10px 12px; margin: 0; border: 0; border-radius: 6px; background: transparent;
+    font-family: var(--mono); font-size: 11px; letter-spacing: .12em; text-transform: uppercase;
+    text-align: left; color: var(--ink-faint);
+  }
+  .rp-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--ink-faint); }
+  .rp-count { color: var(--ink-faint); margin-left: 4px; }
+  .rp-chev { margin-left: auto; font-size: 12px; line-height: 1; transition: transform .2s; }
+  .rp-box.open .rp-chev { transform: rotate(180deg); }
+  .rp-box.rp-lit .rp-head { cursor: pointer; }
+
+  .rp-lit-why { border-color: var(--cyan-dim);
+    box-shadow: 0 0 0 1px rgba(127,212,203,.14), 0 0 18px rgba(127,212,203,.10); }
+  .rp-lit-why .rp-head, .rp-lit-why .rp-head:hover:not(:disabled) { color: var(--cyan); }
+  .rp-lit-why .rp-dot { background: var(--cyan); box-shadow: 0 0 8px var(--cyan); }
+  .rp-lit-err { border-color: #7A3A31;
+    box-shadow: 0 0 0 1px rgba(226,112,95,.18), 0 0 20px rgba(226,112,95,.14); }
+  .rp-lit-err .rp-head, .rp-lit-err .rp-head:hover:not(:disabled) { color: var(--red); }
+  .rp-lit-err .rp-dot { background: var(--red); box-shadow: 0 0 8px var(--red); }
+
+  .rp-box.rp-flash::after {
+    content: ""; position: absolute; inset: -1px; border-radius: 6px; pointer-events: none;
+    animation: rp-flash 1.3s ease-out 1;
+  }
+  .rp-lit-why.rp-flash::after { box-shadow: 0 0 0 2px var(--cyan), 0 0 34px rgba(127,212,203,.55); }
+  .rp-lit-err.rp-flash::after { box-shadow: 0 0 0 2px var(--red), 0 0 34px rgba(226,112,95,.6); }
+  @keyframes rp-flash { from { opacity: 1; } to { opacity: 0; } }
+  @media (prefers-reduced-motion: reduce) { .rp-box.rp-flash::after { animation: none; opacity: 0; } }
+
+  .rp-body { padding: 2px 12px 12px; }
+  .rp-body[hidden] { display: none; }
+  .rp-section + .rp-section { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--panel-edge); }
   .rp-tag {
     display: inline-block; font-size: 10px; letter-spacing: .12em; text-transform: uppercase;
-    padding: 5px 9px; border-radius: 4px;
+    padding: 4px 8px; border-radius: 4px;
     color: var(--cyan); border: 1px solid var(--cyan-dim); background: #111A19;
   }
   .rp-tag.rp-err { color: var(--red); border-color: #5B2E28; background: #1E1413; }
-  .rp-item + .rp-item { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--panel-edge); }
-  .rp-tag + .rp-item { margin-top: 10px; }
+  .rp-item { margin-top: 10px; }
+  .rp-section > .rp-item:first-child { margin-top: 2px; }
+  .rp-item + .rp-item { padding-top: 10px; border-top: 1px dashed var(--panel-edge); }
   .rp-where { font-size: 12px; color: var(--amber); }
   .rp-where .rp-voices { color: var(--ink); margin-left: 8px; }
   .rp-msg { margin-top: 4px; font-size: 14px; line-height: 1.45; color: var(--paper-ink); }
   .rp-why { margin-top: 6px; font-size: 12px; line-height: 1.6; color: var(--ink); }
   .rp-why b { font-weight: 400; color: var(--cyan); }
-  .rp-err-card .rp-why b { color: var(--red); }
+  .rp-err-section .rp-why b { color: var(--red); }
   /* the engine changed an inversion to make the progression work */
   .rp-note { font-size: 12px; line-height: 1.5; color: var(--cyan-dim); text-align: right; }
 
@@ -2565,63 +2606,115 @@
   /* What the chosen alternate broke, and why - under the cost chips, so the
      number and what it is made of sit together.
 
-     Two kinds, and they are told apart because the explanation a reader
-     needs is different. A rule broken with a reason was weighed and
-     allowed, so it says why it was allowed here. A plain broken rule was
-     not, so it says what the rule is there to protect - the explanation
-     the engine keeps for every rule. Each says which chord and which
-     voices, because "the leading tone is doubled" is no use until you can
-     find it on the staff. */
+     Closed, it is one line that lights when something broke: that is what
+     most people need, and a page of reasons on every realization buried the
+     staff under text nobody asked for. Open, it says for each break which
+     chord and voices, the engine's message, and why - "why it's allowed
+     here" for a rule broken with a reason, "why it's a rule" for a rule
+     simply broken, from the explanation the engine keeps for every rule.
+
+     Open or closed is the reader's choice and outlives a new realization;
+     the flash does not, and only fires when the breaks actually change. */
+  var rulesOpen = false;
+  var rulesSeen = "";
+
   function renderExceptions(payload) {
     var box = document.getElementById("exceptions");
     box.innerHTML = "";
-    if (!payload || !payload.ok) return;
+    if (!payload || !payload.ok) { rulesSeen = ""; return; }
     var result = payload.results[currentIndex];
     var numerals = result.numerals || payload.numerals || [];
     var errors = result.violations || [];
     var waived = result.exceptions || [];
 
-    function el(tag, cls, text) {
+    function make(tag, cls, text) {
       var node = document.createElement(tag);
       if (cls) node.className = cls;
       if (text !== undefined) node.textContent = text;
       return node;
     }
+    function plural(n, word) { return n + " " + word + (n === 1 ? "" : "s"); }
 
-    if (!errors.length && !waived.length) {
-      box.appendChild(el("span", "rp-tag", "No violations"));
+    var kind = errors.length ? "err" : waived.length ? "why" : "";
+    var panel = make("div", "rp-box" + (kind ? " rp-lit rp-lit-" + kind : ""));
+    var head = make(kind ? "button" : "div", "rp-head");
+    head.appendChild(make("span", "rp-dot"));
+
+    if (!kind) {
+      head.appendChild(make("span", "", "No violations"));
+      panel.appendChild(head);
+      box.appendChild(panel);
+      rulesSeen = "";
       return;
     }
 
-    function card(items, kind) {
-      var wrap = el("div", "rp-card" + (kind === "err" ? " rp-err-card" : ""));
-      var count = items.length + " rule" + (items.length > 1 ? "s" : "") + " broken";
-      wrap.appendChild(el("span", "rp-tag" + (kind === "err" ? " rp-err" : ""),
-                          kind === "err" ? count : count + " with a reason"));
+    head.type = "button";
+    var label = errors.length ? plural(errors.length, "rule") + " broken"
+                              : plural(waived.length, "rule") + " broken with a reason";
+    head.appendChild(make("span", "", label));
+    if (errors.length && waived.length) {
+      head.appendChild(make("span", "rp-count", "+ " + waived.length + " with a reason"));
+    }
+    var chev = make("span", "rp-chev", "\u25BE");
+    chev.setAttribute("aria-hidden", "true");
+    head.appendChild(chev);
+    panel.appendChild(head);
+
+    var body = make("div", "rp-body");
+    body.id = "ruleDetails";
+    head.setAttribute("aria-controls", body.id);
+
+    function section(items, isErr) {
+      var sec = make("div", "rp-section" + (isErr ? " rp-err-section" : ""));
+      // the header already names a single kind; a label only earns its place when both are here
+      if (errors.length && waived.length) {
+        sec.appendChild(make("span", "rp-tag" + (isErr ? " rp-err" : ""),
+          plural(items.length, "rule") + " broken" + (isErr ? "" : " with a reason")));
+      }
       items.forEach(function (item) {
-        var row = el("div", "rp-item");
-        var where = el("div", "rp-where",
+        var row = make("div", "rp-item");
+        var where = make("div", "rp-where",
           "chord " + (item.chord + 1) + (numerals[item.chord] ? " \u00b7 " + numerals[item.chord] : ""));
         if (item.voices && item.voices.length) {
-          where.appendChild(el("span", "rp-voices", item.voices.join(", ")));
+          where.appendChild(make("span", "rp-voices", item.voices.join(", ")));
         }
         row.appendChild(where);
-        row.appendChild(el("div", "rp-msg", item.message));
-        var because = kind === "err" ? item.explanation : (item.reason || item.explanation);
+        row.appendChild(make("div", "rp-msg", item.message));
+        var because = isErr ? item.explanation : (item.reason || item.explanation);
         if (because) {
-          var why = el("div", "rp-why");
-          why.appendChild(el("b", "", kind === "err" || !item.reason
-                                      ? "Why it's a rule: " : "Why it's allowed here: "));
+          var why = make("div", "rp-why");
+          why.appendChild(make("b", "", isErr || !item.reason
+                                        ? "Why it's a rule: " : "Why it's allowed here: "));
           why.appendChild(document.createTextNode(because));
           row.appendChild(why);
         }
-        wrap.appendChild(row);
+        sec.appendChild(row);
       });
-      box.appendChild(wrap);
+      body.appendChild(sec);
     }
+    if (errors.length) section(errors, true);
+    if (waived.length) section(waived, false);
+    panel.appendChild(body);
 
-    if (errors.length) card(errors, "err");
-    if (waived.length) card(waived, "why");
+    function show(open) {
+      rulesOpen = open;
+      panel.classList.toggle("open", open);
+      body.hidden = !open;
+      head.setAttribute("aria-expanded", open ? "true" : "false");
+    }
+    show(rulesOpen);
+    head.addEventListener("click", function () { show(!rulesOpen); });
+
+    // light up once when what broke is new, not on every redraw of the same result
+    var signature = kind + ":" + errors.concat(waived).map(function (item) {
+      return item.rule + "@" + item.chord + "/" + (item.voices || []).join("+");
+    }).join(",");
+    if (signature !== rulesSeen) {
+      panel.classList.add("rp-flash");
+      panel.addEventListener("animationend", function () { panel.classList.remove("rp-flash"); });
+    }
+    rulesSeen = signature;
+    box.appendChild(panel);
   }
 
   function renderAlternates(payload) {
