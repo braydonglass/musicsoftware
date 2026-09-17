@@ -232,28 +232,38 @@
     text-transform: uppercase; color: var(--amber);
   }
   #busy[data-on] { display: flex; }
-  .bar {
-    width: min(260px, 62%); height: 4px; border-radius: 2px;
-    background: var(--amber-dim); overflow: hidden;
-  }
-  .bar-fill {
-    height: 100%; width: 0; background: var(--amber);
-    transition: width .18s linear;
-  }
+  /* The loader is a bar of music with a playhead crossing it - the same
+     playhead that runs over the staff when the piece plays. When the work
+     can say how far along it is, the playhead stands at that point and the
+     bar behind it fills. When it cannot, the playhead crosses the bar on a
+     loop and each barline answers as it passes. It moves by transform, which
+     the compositor animates off the main thread, so it keeps crossing while
+     the engine has the thread locked. */
+  .loader { width: min(300px, 70%); }
+  .loader svg { display: block; width: 100%; height: auto; overflow: visible; }
+  .ls-line { stroke: var(--ink-faint); stroke-width: 1.2; opacity: .7; }
+  .ls-bar { stroke: var(--ink-faint); stroke-width: 1.2; opacity: .45; }
+  .ls-trail { fill: var(--amber); opacity: .12; transition: width .18s linear; }
+  .ls-head rect { fill: var(--amber); }
+  .ls-head { transform: translateX(6px); transition: transform .18s linear; }
   .bar-label { opacity: .85; }
-  /* When the work behind the bar cannot say how far along it is, the bar
-     says so by sweeping rather than by inventing a number. A percentage
-     that is not measuring anything is worse than no percentage. */
-  .bar.sweeping .bar-fill {
-    width: 34%; transition: none;
-    animation: sweep 1.1s ease-in-out infinite;
-  }
-  @keyframes sweep {
-    0%   { transform: translateX(-110%); }
-    100% { transform: translateX(320%); }
+  .loader.sweeping .ls-trail { opacity: 0; }
+  .loader.sweeping .ls-head { transition: none; animation: playhead 1.6s linear infinite; }
+  /* negative delays put each barline's flash exactly where the head crosses
+     it, from the first frame rather than after a first silent lap */
+  .loader.sweeping .ls-bar { animation: barline 1.6s linear infinite; }
+  .loader.sweeping .ls-bar-1 { animation-delay: -1.2s; }
+  .loader.sweeping .ls-bar-2 { animation-delay: -0.8s; }
+  .loader.sweeping .ls-bar-3 { animation-delay: -0.4s; }
+  @keyframes playhead { from { transform: translateX(6px); } to { transform: translateX(234px); } }
+  @keyframes barline {
+    0%   { stroke: var(--amber); opacity: .95; }
+    22%  { stroke: var(--ink-faint); opacity: .45; }
+    100% { stroke: var(--ink-faint); opacity: .45; }
   }
   @media (prefers-reduced-motion: reduce) {
-    .bar.sweeping .bar-fill { animation: none; width: 100%; opacity: .5; }
+    .loader.sweeping .ls-head { animation: none; transform: translateX(120px); }
+    .loader.sweeping .ls-bar { animation: none; }
   }
 
   .figure-actions { display: flex; gap: 6px; }
@@ -266,7 +276,14 @@
   /* The one duration distinction the page draws. There is no half-note
      glyph and no augmentation dot here, so a note held under the figure is
      told apart by an open head - which is enough to read it as long. */
-  .head-open  { fill: none; stroke: var(--amber); stroke-width: 2; }
+  /* Two classes, so it outranks the plain .head fill below whatever order the
+     rules sit in. With one class it lost, and every half note in a figure was
+     drawn filled - which is to say, as a quarter note. */
+  .head.head-open { fill: none; stroke: var(--amber); stroke-width: 2; }
+  /* The rest of a figure's notation: rests where a voice waits, flags on a
+     note with no beam, dots, and ties. All in the figure's one colour. */
+  .rest, .flag, .dot, .tie { fill: var(--amber); }
+  .rest .rest-line { fill: none; stroke: var(--amber); stroke-width: .13; stroke-linecap: round; }
   .meter-digit{ fill: var(--ink); opacity: .8; font-family: var(--mono);
                 font-size: 27px; font-weight: 600; text-anchor: middle; }
   .barline-end{ stroke: var(--ink-faint); stroke-width: 3;   opacity: .7; }
@@ -544,7 +561,20 @@
       <svg class="score" id="score" role="img" aria-label="Four-part realization"></svg>
     </div>
     <div id="busy" role="status" aria-live="polite">
-      <div class="bar" id="busyBar"><div class="bar-fill" id="busyFill"></div></div>
+      <div class="loader" id="busyBar">
+        <svg viewBox="0 0 240 64" aria-hidden="true">
+          <line class="ls-line" x1="6" y1="12" x2="234" y2="12"/>
+          <line class="ls-line" x1="6" y1="22" x2="234" y2="22"/>
+          <line class="ls-line" x1="6" y1="32" x2="234" y2="32"/>
+          <line class="ls-line" x1="6" y1="42" x2="234" y2="42"/>
+          <line class="ls-line" x1="6" y1="52" x2="234" y2="52"/>
+          <line class="ls-bar ls-bar-1" x1="63" y1="12" x2="63" y2="52"/>
+          <line class="ls-bar ls-bar-2" x1="120" y1="12" x2="120" y2="52"/>
+          <line class="ls-bar ls-bar-3" x1="177" y1="12" x2="177" y2="52"/>
+          <rect class="ls-trail" id="busyTrail" x="6" y="12" width="0" height="40"/>
+          <g class="ls-head" id="busyFill"><rect x="-1.5" y="4" width="3" height="56" rx="1.5"/></g>
+        </svg>
+      </div>
       <div class="bar-label" id="busyLabel">working</div>
     </div>
   </div>
@@ -1492,7 +1522,8 @@
      conditional in every line of it. */
 
   var BEAT_W = 46;         // the least a beat may be worth in pixels
-  var COLUMN_W = 19.5;     // the least room one struck column needs
+  var COLUMN_W = 22;       // the least room one struck column needs;
+                           // a dotted eighth with its flag needs this much
   var SYS_GAP = 40;        // air between one system and the next
   var METER_W = 34;        // reserved on every system, printed on the first
   var BEAM_GAP = 6.5;      // between the beams of a sixteenth
@@ -1534,7 +1565,7 @@
   }
 
   var MIN_STEM = 22;       // the shortest stem a beam may leave a note
-  var MAX_SLANT = 3 * SPACE;
+  var MAX_SLANT = 1.5 * SPACE;  // steeper than this reads as hand-drawn
 
   function drawPrelude(payload, resultIndex) {
     var data = preludeData(payload, resultIndex);
@@ -1658,26 +1689,123 @@
         g.appendChild(hit);
 
         if (m) g.appendChild(line(mx, yOf(TREBLE[4]), mx, yOf(BASS[0]), "barline"));
-        drawFigure(g, byChord[index] || [], index * bar, mx, unit, scale, beatLen);
+        drawFigure(g, byChord[index] || [], index * bar, mx, unit, scale, beatLen, bar);
       }
     }
   }
 
-  /* One bar of the figure. */
-  function drawFigure(g, notes, origin, mx, unit, scale, beatLen) {
-    if (!notes.length) return;
+  /* ---------- engraving the figure ----------
 
-    var starts = {};
-    notes.forEach(function (n) { starts[n.start] = (starts[n.start] || 0) + 1; });
+     A figure is several voices on one grand staff: a running line, and
+     sometimes notes held under or over it. Each has its own rhythm, so each
+     is written with its own note values, and where a voice is silent the
+     staff says so with a rest. Bar 1 of Bach's prelude is the reference:
+     a half-note C, a sixteenth rest before the second note, that note as a
+     dotted eighth tied to a quarter, and an eighth rest before the right
+     hand's sixteenths. */
 
-    function place(n) {
-      var x = mx + 11 + (n.start - origin) * scale;
-      /* A drone is struck with the first note of the figure, so the two want
-         the same spot. The held note steps aside, the way an engraver moves
-         the second of two notes in a chord off the stem. */
-      if (starts[n.start] > 1 && n.beats > unit) x -= 15;
-      return x;
+  var NOTE_VALUES = [          // beats, shape, dots
+    [6, "whole", 1], [4, "whole", 0], [3, "half", 1], [2, "half", 0],
+    [1.5, "quarter", 1], [1, "quarter", 0], [0.75, "eighth", 1],
+    [0.5, "eighth", 0], [0.375, "sixteenth", 1], [0.25, "sixteenth", 0]
+  ];
+  var FLAGS = { eighth: 1, sixteenth: 2 };
+
+  function exactValue(beats) {
+    for (var i = 0; i < NOTE_VALUES.length; i++) {
+      if (Math.abs(NOTE_VALUES[i][0] - beats) < 1e-6) return NOTE_VALUES[i];
     }
+    return null;
+  }
+
+  /* Write a duration as note values, the way an engraver would. A length
+     that starts on the beat and has a single-value name is one note. One
+     that starts off the beat first runs to the next beat, then continues in
+     whole values - so a note entering on the second sixteenth and lasting
+     to the half bar is a dotted eighth tied to a quarter, not a half note
+     sitting a sixteenth late. */
+  function spell(start, beats, beatLen) {
+    var pieces = [], t = start, left = beats;
+    var intoBeat = (t / beatLen) - Math.floor(t / beatLen + 1e-9);
+    if (intoBeat > 1e-6 || !exactValue(left)) {
+      var toBeat = intoBeat > 1e-6 ? (1 - intoBeat) * beatLen : 0;
+      if (toBeat > 1e-6 && toBeat < left - 1e-6 && exactValue(toBeat)) {
+        pieces.push({ t: t, beats: toBeat, value: exactValue(toBeat) });
+        t += toBeat; left -= toBeat;
+      }
+    }
+    while (left > 1e-6) {
+      var pick = null;
+      for (var i = 0; i < NOTE_VALUES.length; i++) {
+        if (NOTE_VALUES[i][0] <= left + 1e-6) { pick = NOTE_VALUES[i]; break; }
+      }
+      if (!pick) break;
+      pieces.push({ t: t, beats: pick[0], value: pick });
+      t += pick[0]; left -= pick[0];
+    }
+    return pieces;
+  }
+
+  /* Rests, flags, dots and ties, in staff spaces around their own origin,
+     scaled like the clefs so they stay in proportion with the heads. */
+  function inSpaces(x, y, cls) {
+    return el("g", { "class": cls, transform: "translate(" + x + "," + y + ") scale(" + SPACE + ")" });
+  }
+
+  function rest(g, value, x, y) {
+    var r = inSpaces(x, y, "rest");
+    var shape = value[1];
+    if (shape === "whole" || shape === "half") {
+      r.appendChild(el("rect", { x: -0.6, y: shape === "whole" ? 0 : -0.5, width: 1.2, height: 0.5 }));
+    } else if (shape === "quarter") {
+      r.appendChild(el("path", { "class": "rest-line", d: "M-0.2 -1.4 L0.3 -0.8 L-0.2 -0.2 L0.3 0.4 Q-0.35 0.25 0.05 1.1" }));
+    } else {
+      var blobs = shape === "eighth" ? 1 : 2;
+      for (var b = 0; b < blobs; b++) {
+        var by = -0.5 + b * 0.62, bx = -0.28 - b * 0.12;
+        r.appendChild(el("circle", { cx: bx, cy: by, r: 0.19 }));
+        r.appendChild(el("path", { "class": "rest-line",
+          d: "M" + bx + " " + (by + 0.12) + " Q" + (bx + 0.35) + " " + (by + 0.28) + " " + (0.34 - b * 0.12) + " " + (by - 0.2) }));
+      }
+      r.appendChild(el("path", { "class": "rest-line", d: "M0.34 -0.7 L" + (blobs === 1 ? "-0.02 0.8" : "-0.26 1.25") }));
+    }
+    for (var dt = 0; dt < value[2]; dt++) {
+      r.appendChild(el("circle", { cx: 0.75 + dt * 0.4, cy: -0.5, r: 0.13 }));
+    }
+    g.appendChild(r);
+  }
+
+  function flags(g, count, sx, tipY, up) {
+    for (var f = 0; f < count; f++) {
+      var fl = inSpaces(sx, tipY + (up ? 1 : -1) * f * 0.62 * SPACE, "flag");
+      var k = up ? 1 : -1;
+      fl.appendChild(el("path", { d: "M0 0 C0.05 " + (0.55 * k) + " 0.95 " + (0.85 * k) + " 0.72 " +
+        (1.9 * k) + " C0.72 " + (1.25 * k) + " 0.28 " + (0.98 * k) + " 0 " + (0.85 * k) + " Z" }));
+      g.appendChild(fl);
+    }
+  }
+
+  function dots(g, count, x, d) {
+    // a dot sits in a space: on a line it moves up into the space above
+    var dy = yOf(d % 2 === 0 ? d + 1 : d);
+    for (var i = 0; i < count; i++) {
+      g.appendChild(el("circle", { "class": "dot", cx: x + HEAD_RX + 6 + i * 7, cy: dy, r: 2.6 }));
+    }
+  }
+
+  function tie(g, x1, x2, y, below) {
+    var k = below ? 1 : -1, y0 = y + k * (HEAD_RY + 2.5), h = k * 9, mid = (x1 + x2) / 2;
+    g.appendChild(el("path", { "class": "tie",
+      d: "M" + x1 + " " + y0 + " Q" + mid + " " + (y0 + h) + " " + x2 + " " + y0 +
+         " Q" + mid + " " + (y0 + h * 0.62) + " " + x1 + " " + y0 + " Z" }));
+  }
+
+  /* One bar of the figure. */
+  function drawFigure(g, notes, origin, mx, unit, scale, beatLen, bar) {
+    if (!notes.length) return;
+    beatLen = beatLen || 1;
+
+    function xAt(t) { return mx + 11 + (t - origin) * scale; }
 
     function head(n, x, open) {
       var d = dia(n), y = yOf(d);
@@ -1696,37 +1824,82 @@
       return y;
     }
 
-    /* A note that outlasts one step of the pattern is being held under the
-       figure - Bach's two low notes, or the Alberti melody. It is drawn open
-       and left unbeamed, because it is not part of the run. */
     var held = notes.filter(function (n) { return n.beats > unit + 1e-9; });
     var running = notes.filter(function (n) { return n.beats <= unit + 1e-9; });
-
-    /* A held note's stem goes the ordinary way - up from a low note, down
-       from a high one - which also keeps it clear of the beam, since the
-       beam always sits above the figure. */
-    held.forEach(function (n) {
-      var x = place(n), y = head(n, x, true);
-      var up = dia(n) < MIDDLE_C;
-      g.appendChild(up ? line(x + 6.8, y - 1.6, x + 6.8, y - STEM, "stem")
-                       : line(x - 6.8, y + 1.6, x - 6.8, y + STEM, "stem"));
-    });
-
-    /* One beam group to a beat, and the group is not broken where it crosses
-       from one staff to the other. It could hardly be: this staff has a
-       single vertical origin, so a note sits where its pitch puts it and
-       "which staff" is not a thing the figure gets to decide. Bach writes
-       the G below middle C on the upper staff for exactly that reason, and
-       beams it with the two notes above it.
-
-       Stems go up throughout, so the beam rides over the figure rather than
-       through the chord it is unfolding. */
     running.sort(function (a, b) { return a.start - b.start || dia(a) - dia(b); });
 
+    var runTop = -Infinity, runBottom = Infinity;
+    running.forEach(function (n) {
+      runTop = Math.max(runTop, dia(n));
+      runBottom = Math.min(runBottom, dia(n));
+    });
+    var heldBelow = held.some(function (n) { return dia(n) < runTop; });
+    var heldAbove = held.some(function (n) { return dia(n) >= runTop; });
+
+    /* ---- the held voices ---- */
+
+    /* Notes that end together were begun as one gesture, even when they
+       enter a sixteenth apart: Bach's C and E both ring to the half bar, and
+       the second one rests until it enters. Stems point away from the
+       running line - up from a note held above it, down from one held below
+       - because a held stem pointing into the figure lands its flag on the
+       figure's first notes. With no running line, two held notes split the
+       ordinary way, lower down and upper up. */
+    var stacks = {};
+    held.forEach(function (n) {
+      var key = (n.start + n.beats).toFixed(4);
+      (stacks[key] = stacks[key] || []).push(n);
+    });
+
+    function runningNear(t, d) {
+      return running.some(function (n) {
+        return Math.abs(n.start - t) < 1e-6 && Math.abs(dia(n) - d) <= 1;
+      });
+    }
+
+    Object.keys(stacks).forEach(function (key) {
+      var stack = stacks[key].slice().sort(function (a, b) { return dia(a) - dia(b); });
+      var first = stack.reduce(function (m, n) { return n.start < m ? n.start : m; }, Infinity);
+      stack.forEach(function (n, i) {
+        var d = dia(n);
+        var up = running.length ? d >= runTop
+                                : (stack.length > 1 ? i > 0 : d < MIDDLE_C);
+
+        // silence in this voice from when its stack began to when it enters
+        if (n.start > first + 1e-6) {
+          spell(first, n.start - first, beatLen).forEach(function (p) {
+            rest(g, p.value, xAt(p.t), yOf(d) + (up ? -1 : 1) * SPACE);
+          });
+        }
+
+        var pieces = spell(n.start, n.beats, beatLen);
+        var drawn = pieces.map(function (p) {
+          var x = xAt(p.t);
+          // a head that would touch a running note at the same moment steps right
+          if (runningNear(p.t, d)) x += HEAD_RX * 2 + 2;
+          var shape = p.value[1];
+          var y = head(n, x, shape === "whole" || shape === "half");
+          if (shape !== "whole") {
+            var sx = up ? x + 6.8 : x - 6.8;
+            var tip = up ? y - STEM : y + STEM;
+            g.appendChild(line(sx, up ? y - 1.6 : y + 1.6, sx, tip, "stem"));
+            if (FLAGS[shape]) flags(g, FLAGS[shape], sx, tip, up);
+          }
+          dots(g, p.value[2], x, d);
+          return { x: x, y: y };
+        });
+        for (var k = 0; k + 1 < drawn.length; k++) {
+          tie(g, drawn[k].x + HEAD_RX, drawn[k + 1].x - HEAD_RX, drawn[k].y, up);
+        }
+      });
+    });
+
+    if (!running.length) return;
+
+    /* ---- the running voice ---- */
+
     /* Notes struck at the same instant are one column with one stem - a
-       chord, not three notes that happen to coincide. That is the whole
-       difference between an accompaniment and an arpeggio, and the staff
-       has to show it. */
+       chord, not three notes that happen to coincide. */
     var columns = [], column = null;
     running.forEach(function (n) {
       if (!column || Math.abs(column.start - n.start) > 1e-9) {
@@ -1736,70 +1909,154 @@
       column.notes.push(n);
     });
 
+    /* Where the running voice is silent inside the bar, it rests. Bach's
+       right hand waits an eighth for the two bass notes before it starts. */
+    var covered = [];
+    running.forEach(function (n) { covered.push([n.start, n.start + n.beats]); });
+    covered.sort(function (a, b) { return a[0] - b[0]; });
+    var cursor = origin, gaps = [];
+    covered.forEach(function (c) {
+      if (c[0] > cursor + 1e-6) gaps.push([cursor, c[0]]);
+      cursor = Math.max(cursor, c[1]);
+    });
+    if (origin + bar > cursor + 1e-6) gaps.push([cursor, origin + bar]);
+    gaps.forEach(function (gap) {
+      var next = columns.filter(function (c) {
+        return c.start >= gap[1] - 1e-6 && c.start < gap[1] + beatLen;
+      });
+      // the rest sits in the middle of the notes it is waiting for
+      var lo = Infinity, hi = -Infinity;
+      (next.length ? next : columns).forEach(function (c) {
+        c.notes.forEach(function (n) { lo = Math.min(lo, dia(n)); hi = Math.max(hi, dia(n)); });
+      });
+      var mid = Math.round((lo + hi) / 2);
+      spell(gap[0] - origin, gap[1] - gap[0], beatLen).forEach(function (p) {
+        rest(g, p.value, xAt(origin + p.t), yOf(mid));
+      });
+    });
+
+    /* Beam groups follow the beat a reader counts. Sixteenths go four to a
+       quarter; eighths in common time go four to a half bar, the way an
+       Alberti bass is always written, and in two or three time they run the
+       whole bar, the way a waltz accompaniment is; compound time groups by
+       the dotted quarter. */
+    var groupLen = beatLen;
+    if (beatLen === 1 && Math.abs(unit - 0.5) < 1e-9) groupLen = bar >= 4 ? 2 : bar;
+
     var runs = [], run = null;
     columns.forEach(function (c) {
-      var beat = Math.floor((c.start - origin) / (beatLen || 1) + 1e-9);
-      if (!run || run.beat !== beat) { run = { beat: beat, columns: [] }; runs.push(run); }
+      var slot = Math.floor((c.start - origin) / groupLen + 1e-9);
+      if (!run || run.slot !== slot) { run = { slot: slot, columns: [] }; runs.push(run); }
       run.columns.push(c);
     });
 
-    var beams = unit <= 0.25 + 1e-9 ? 2 : 1;
+    var beams = FLAGS[unit <= 0.25 + 1e-9 ? "sixteenth" : unit <= 0.5 + 1e-9 ? "eighth" : "none"] || 0;
 
     runs.forEach(function (r) {
       var placed = r.columns.map(function (c) {
-        var x = place(c.notes[0]);
+        var x = xAt(c.start);
         var ys = c.notes.map(function (n, i) {
-          /* Two notes a step apart cannot share a side of the stem without
-             overlapping, so the upper one moves across it, the way an
-             engraver writes a second. */
+          // a second cannot share a side of the stem, so the upper note crosses it
           var crowded = i > 0 && dia(n) - dia(c.notes[i - 1]) === 1;
           return head(n, crowded ? x + 13 : x, false);
         });
-        // the stem starts at the lowest head of the column and passes them all
-        return { x: x, y: Math.max.apply(null, ys),
-                 top: Math.min.apply(null, ys) };
+        var ds = c.notes.map(dia);
+        return { x: x, low: Math.max.apply(null, ys), high: Math.min.apply(null, ys),
+                 dMin: Math.min.apply(null, ds), dMax: Math.max.apply(null, ds) };
       });
 
-      /* A quarter note is a head and a stem and nothing more. Beams and
-         flags are what mark a note as shorter than a quarter, so giving one
-         a stub turns every step of a waltz into an eighth. */
-      if (unit >= 1 - 1e-9) {
+      /* A quarter note is a head and a stem, nothing more. */
+      if (!beams) {
         placed.forEach(function (q) {
-          g.appendChild(line(q.x + 6.8, q.y - 1.6, q.x + 6.8, q.top - STEM, "stem"));
+          var up = (q.dMin + q.dMax) / 2 < TREBLE[2];
+          g.appendChild(up ? line(q.x + 6.8, q.low - 1.6, q.x + 6.8, q.high - STEM, "stem")
+                           : line(q.x - 6.8, q.high + 1.6, q.x - 6.8, q.low + STEM, "stem"));
         });
         return;
       }
 
-      var sx = placed[0].x + 6.8;
-      var ex = placed[placed.length - 1].x + 6.8;
-      /* A note alone in its group still owes the reader its flags. A stub
-         off the stem says what a flag would, and needs no glyph. */
-      if (placed.length === 1) ex = sx + 13;
+      /* A lone note flies its own flags. */
+      if (placed.length === 1) {
+        var q = placed[0], up1 = (q.dMin + q.dMax) / 2 < TREBLE[2];
+        var sx1 = up1 ? q.x + 6.8 : q.x - 6.8, tip1 = up1 ? q.high - STEM : q.low + STEM;
+        g.appendChild(line(sx1, up1 ? q.low - 1.6 : q.high + 1.6, sx1, tip1, "stem"));
+        flags(g, beams, sx1, tip1, up1);
+        return;
+      }
 
-      /* The beam follows the notes rather than sitting flat over the highest
-         of them: a flat beam across a two-octave arpeggio leaves the low
-         note on a stem half the height of the staff. The slant is capped so
-         a wide leap does not tip the beam off the page, and then the whole
-         beam is lifted until the shortest stem is long enough to read. */
-      var rise = placed[placed.length - 1].top - placed[0].top;
+      /* A group that leaps between the staves is beamed between them: the
+         low notes reach up, the high notes reach down, and the beam lies in
+         the gap. Beaming it from above instead leaves a bass note on a stem
+         two octaves long, which is what made the Alberti bass unreadable. */
+      var split = null, best = 0;
+      var cuts = placed.map(function (p) { return p.dMin; }).sort(function (a, b) { return a - b; });
+      cuts.forEach(function (cut) {
+        var lower = placed.filter(function (p) { return p.dMin < cut; });
+        var upper = placed.filter(function (p) { return p.dMin >= cut; });
+        if (!lower.length || !upper.length) return;
+        // only a leap across middle C is beamed between the staves
+        if (!lower.every(function (p) { return p.dMax < MIDDLE_C; })) return;
+        if (!upper.every(function (p) { return p.dMin >= MIDDLE_C; })) return;
+        var roomTop = Math.max.apply(null, upper.map(function (p) { return p.low; }));
+        var roomBottom = Math.min.apply(null, lower.map(function (p) { return p.high; }));
+        var room = roomBottom - roomTop;
+        if (room > best) { best = room; split = { cut: cut, top: roomTop, bottom: roomBottom }; }
+      });
+      var thickness = (beams - 1) * BEAM_GAP;
+      if (split && best >= 2 * MIN_STEM + thickness + 8) {
+        var yb = (split.top + split.bottom) / 2 - thickness / 2;
+        var xs = [];
+        placed.forEach(function (p) {
+          if (p.dMin >= split.cut) {
+            xs.push(p.x - 6.8);
+            g.appendChild(line(p.x - 6.8, p.high + 1.6, p.x - 6.8, yb + thickness, "stem"));
+          } else {
+            xs.push(p.x + 6.8);
+            g.appendChild(line(p.x + 6.8, p.low - 1.6, p.x + 6.8, yb, "stem"));
+          }
+        });
+        var bx1 = Math.min.apply(null, xs), bx2 = Math.max.apply(null, xs);
+        for (var kb = 0; kb < beams; kb++) {
+          g.appendChild(line(bx1, yb + kb * BEAM_GAP, bx2, yb + kb * BEAM_GAP, "beam"));
+        }
+        return;
+      }
+
+      /* Otherwise one side. When notes are held beside the figure, the
+         figure's stems point away from them, so the two voices never share
+         the same stretch of staff: up over a held bass, down under a held
+         melody. On its own, a group sits the ordinary way - stems down above
+         the treble staff's middle line, up below it. The beam follows the
+         notes, capped in slant, and is pushed out until its shortest stem
+         reads. */
+      var avg = 0;
+      placed.forEach(function (p) { avg += (p.dMin + p.dMax) / 2; });
+      avg /= placed.length;
+      var upG = avg < TREBLE[2];
+      if (heldBelow && !heldAbove) upG = true;
+      if (heldAbove && !heldBelow) upG = false;
+      var side = upG ? 1 : -1;
+      var sx = placed[0].x + side * 6.8, ex = placed[placed.length - 1].x + side * 6.8;
+      var near = function (p) { return upG ? p.high : p.low; };
+      var far = function (p) { return upG ? p.low : p.high; };
+      var rise = near(placed[placed.length - 1]) - near(placed[0]);
       if (rise > MAX_SLANT) rise = MAX_SLANT;
       if (rise < -MAX_SLANT) rise = -MAX_SLANT;
-      var y1 = placed[0].top - STEM, y2 = y1 + rise;
-      var span = ex - sx;
+      var y1 = near(placed[0]) - side * STEM, y2 = y1 + rise, span = ex - sx;
       function beamAt(x) { return span ? y1 + (y2 - y1) * (x - sx) / span : y1; }
-      var lift = 0;
-      placed.forEach(function (q) {
-        // measured from the top of the column, which is what the beam must clear
-        var short = MIN_STEM - (q.top - beamAt(q.x + 6.8));
-        if (short > lift) lift = short;
+      var push = 0;
+      placed.forEach(function (p) {
+        var stemX = p.x + side * 6.8;
+        var short = MIN_STEM - side * (near(p) - beamAt(stemX));
+        if (short > push) push = short;
       });
-      y1 -= lift; y2 -= lift;
-
-      placed.forEach(function (q) {
-        g.appendChild(line(q.x + 6.8, q.y - 1.6, q.x + 6.8, beamAt(q.x + 6.8), "stem"));
+      y1 -= side * push; y2 -= side * push;
+      placed.forEach(function (p) {
+        var stemX = p.x + side * 6.8;
+        g.appendChild(line(stemX, far(p) - side * 1.6, stemX, beamAt(stemX), "stem"));
       });
-      for (var b = 0; b < beams; b++) {
-        var off = b * BEAM_GAP;
+      for (var b2 = 0; b2 < beams; b2++) {
+        var off = side * b2 * BEAM_GAP;
         g.appendChild(line(sx, y1 + off, ex, y2 + off, "beam"));
       }
     });
@@ -2136,21 +2393,23 @@
      even a solver that counted its own chords could not paint the count.
      For that stretch the bar sweeps instead of claiming a percentage. */
   function setProgress(fraction, label) {
-    var bar = document.getElementById("busyBar");
-    var fill = document.getElementById("busyFill");
+    var box = document.getElementById("busyBar");
+    var head = document.getElementById("busyFill");
+    var trail = document.getElementById("busyTrail");
     if (fraction === null || fraction === undefined) {
-      /* The inline width has to go, not just be overruled. An inline style
-         beats a stylesheet rule whatever the selector, so leaving the last
-         determinate value on the element pins the sweeping bar at that width
-         - and the width it is usually pinned at is the 0 it was set to when
-         the overlay opened. The sweep then animates something with no width,
-         which is a bar that looks broken rather than busy. */
-      fill.style.width = "";
-      bar.classList.add("sweeping");
+      /* The inline position has to go, not just be overruled. Whatever the
+         playhead was last parked at would otherwise sit on the element when
+         the loop starts - the same trap that once pinned the old sweeping
+         bar at zero width and made it look broken instead of busy. */
+      head.style.transform = "";
+      trail.setAttribute("width", 0);
+      box.classList.add("sweeping");
     } else {
-      bar.classList.remove("sweeping");
+      box.classList.remove("sweeping");
       var clamped = Math.max(0, Math.min(1, fraction));
-      fill.style.width = (clamped * 100) + "%";
+      var x = 6 + clamped * 228;
+      head.style.transform = "translateX(" + x + "px)";
+      trail.setAttribute("width", x - 6);
     }
     if (label) document.getElementById("busyLabel").textContent = label;
   }
