@@ -1564,6 +1564,13 @@
       if (count > busiest) busiest = count;
     });
     var measureW = Math.max(busiest * COLUMN_W, bar * BEAT_W);
+
+    /* Beams gather notes by the beat a reader counts, and in compound time
+       that beat is a dotted quarter, not a quarter. Grouping 12/8 by the
+       quarter beams the eighths in pairs, which is how 3/4 looks written in
+       eighths - the right notes, spelled as the wrong meter. */
+    var meterParts = String(data.meter || "4/4").split("/");
+    var beatLen = (+meterParts[1] === 8 && +meterParts[0] % 3 === 0) ? 1.5 : 1;
     var scale = (measureW - 22) / bar;      // beats to pixels inside a bar
 
     /* How many bars fit across the window. The time signature's space is
@@ -1651,13 +1658,13 @@
         g.appendChild(hit);
 
         if (m) g.appendChild(line(mx, yOf(TREBLE[4]), mx, yOf(BASS[0]), "barline"));
-        drawFigure(g, byChord[index] || [], index * bar, mx, unit, scale);
+        drawFigure(g, byChord[index] || [], index * bar, mx, unit, scale, beatLen);
       }
     }
   }
 
   /* One bar of the figure. */
-  function drawFigure(g, notes, origin, mx, unit, scale) {
+  function drawFigure(g, notes, origin, mx, unit, scale, beatLen) {
     if (!notes.length) return;
 
     var starts = {};
@@ -1731,7 +1738,7 @@
 
     var runs = [], run = null;
     columns.forEach(function (c) {
-      var beat = Math.floor((c.start - origin) + 1e-9);
+      var beat = Math.floor((c.start - origin) / (beatLen || 1) + 1e-9);
       if (!run || run.beat !== beat) { run = { beat: beat, columns: [] }; runs.push(run); }
       run.columns.push(c);
     });
@@ -1752,6 +1759,16 @@
         return { x: x, y: Math.max.apply(null, ys),
                  top: Math.min.apply(null, ys) };
       });
+
+      /* A quarter note is a head and a stem and nothing more. Beams and
+         flags are what mark a note as shorter than a quarter, so giving one
+         a stub turns every step of a waltz into an eighth. */
+      if (unit >= 1 - 1e-9) {
+        placed.forEach(function (q) {
+          g.appendChild(line(q.x + 6.8, q.y - 1.6, q.x + 6.8, q.top - STEM, "stem"));
+        });
+        return;
+      }
 
       var sx = placed[0].x + 6.8;
       var ex = placed[placed.length - 1].x + 6.8;
