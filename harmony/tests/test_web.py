@@ -152,6 +152,33 @@ class TestMidiExport(unittest.TestCase):
         self.assertEqual(plain, stale)
 
 
+class TestBrokenRulesAreExplained(unittest.TestCase):
+    """A broken rule has to say what the rule is for, not only that it broke.
+
+    The page shows each one under the alternate costs: where it happened,
+    the engine's message, and either the reason it was allowed or, for a
+    plain fault, the rule's own explanation. That last part used to exist
+    only on the command line.
+    """
+
+    def setUp(self):
+        # IV V vi doubles the leading tone on purpose, to avoid a worse fault
+        self.result = realize_payload("C major", "IV V vi", "strict", 1)["results"][0]
+
+    def test_a_rule_broken_with_a_reason_carries_both(self):
+        self.assertTrue(self.result["exceptions"])
+        item = self.result["exceptions"][0]
+        self.assertEqual(item["rule"], "doubled_leading_tone")
+        self.assertTrue(item["reason"])
+        self.assertTrue(item["explanation"])
+        self.assertIn(item["chord"], range(len(self.result["numerals"])))
+
+    def test_every_break_of_either_kind_has_an_explanation(self):
+        for item in self.result["violations"] + self.result["exceptions"]:
+            self.assertIsInstance(item["explanation"], str)
+            self.assertTrue(item["explanation"].strip(), item["rule"])
+
+
 class TestThePreludeInThePayload(unittest.TestCase):
     """Every form travels with the realization, so the picker costs nothing.
 

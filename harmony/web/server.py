@@ -33,7 +33,7 @@ from ..core.prelude import figurate, ladder_for
 from ..core.prelude import spans as prelude_spans
 from ..core.roman import RomanNumeralError, parse_progression
 from ..core.roman import parse as parse_roman
-from ..core.rules.registry import PROFILE_DIR, Profile
+from ..core.rules.registry import PROFILE_DIR, REGISTRY, Profile
 from ..core.rules.state import position_of
 from ..core.solver import NoRealization, solve
 from ..core.voice import VOICE_NAMES
@@ -52,6 +52,11 @@ DEFAULT_METER = (4, 4)
 
 # One ladder serves every form, so it is built as tall as the tallest needs.
 PRELUDE_RUNGS = max(form.rungs for form in PRELUDE_FORM_LIST)
+
+
+def _explanation(rule_id: str) -> str:
+    rule = REGISTRY.get(rule_id)
+    return rule.explanation if rule else ""
 
 
 def _meter_for(form_id: str | None) -> tuple[int, int]:
@@ -231,14 +236,20 @@ def realize_payload(key_text: str, progression: str, profile_name: str,
                 {"chord": i, "written": w, "used": u}
                 for i, w, u in result.substitutions(specs)
             ],
+            # Each carries the rule's own explanation as well as what went
+            # wrong. The command line always printed it; the page never had
+            # it, so a broken rule could say that it broke but not what the
+            # rule is there to protect.
             "violations": [
                 {"rule": v.rule_id, "voices": v.voices,
-                 "chord": v.chord_index, "message": v.message}
+                 "chord": v.chord_index, "message": v.message,
+                 "explanation": _explanation(v.rule_id)}
                 for v in errors_only(graded)
             ],
             "exceptions": [
                 {"rule": v.rule_id, "voices": v.voices, "chord": v.chord_index,
-                 "message": v.message, "reason": v.reason}
+                 "message": v.message, "reason": v.reason,
+                 "explanation": _explanation(v.rule_id)}
                 for v in explained_breaks(graded)
             ],
             "chords": [

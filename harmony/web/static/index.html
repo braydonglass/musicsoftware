@@ -239,31 +239,47 @@
      loop and each barline answers as it passes. It moves by transform, which
      the compositor animates off the main thread, so it keeps crossing while
      the engine has the thread locked. */
-  .loader { width: min(300px, 70%); }
-  .loader svg { display: block; width: 100%; height: auto; overflow: visible; }
+  /* Only the staff is SVG. Everything that moves is an ordinary element
+     moving by transform or opacity, because those are the two properties
+     the compositor animates on its own thread - and the solve in the static
+     build holds the main thread for as long as it runs. An SVG element
+     animated the same way is left to the main thread in Chrome, so a
+     playhead drawn in SVG simply stopped for the whole solve.
+
+     The track spans the staff (x 6 to 234 of the 240-wide drawing). The
+     sweep is a track-wide block whose right edge is the playhead, so
+     translating it from -100% to 0 carries the head across, and its own
+     background is the filled bar behind the head. */
+  .loader { position: relative; width: min(300px, 70%); }
+  .loader svg { display: block; width: 100%; height: auto; }
   .ls-line { stroke: var(--ink-faint); stroke-width: 1.2; opacity: .7; }
   .ls-bar { stroke: var(--ink-faint); stroke-width: 1.2; opacity: .45; }
-  .ls-trail { fill: var(--amber); opacity: .12; transition: width .18s linear; }
-  .ls-head rect { fill: var(--amber); }
-  .ls-head { transform: translateX(6px); transition: transform .18s linear; }
+  .ls-track { position: absolute; top: 0; bottom: 0; left: 2.5%; right: 2.5%; overflow: hidden; }
+  .ls-sweep {
+    position: absolute; inset: 0; transform: translateX(-100%);
+    transition: transform .18s linear; will-change: transform;
+  }
+  .ls-trail { position: absolute; left: 0; right: 0; top: 18.75%; bottom: 18.75%;
+              background: var(--amber); opacity: .12; }
+  .ls-head { position: absolute; right: 0; top: 6.25%; bottom: 6.25%; width: 3px;
+             border-radius: 1.5px; background: var(--amber); }
+  .ls-tick { position: absolute; top: 18.75%; bottom: 18.75%; width: 2px; margin-left: -1px;
+             background: var(--amber); opacity: 0; }
+  .ls-tick-1 { left: 25%; } .ls-tick-2 { left: 50%; } .ls-tick-3 { left: 75%; }
   .bar-label { opacity: .85; }
   .loader.sweeping .ls-trail { opacity: 0; }
-  .loader.sweeping .ls-head { transition: none; animation: playhead 1.6s linear infinite; }
+  .loader.sweeping .ls-sweep { transition: none; animation: playhead 1.6s linear infinite; }
   /* negative delays put each barline's flash exactly where the head crosses
      it, from the first frame rather than after a first silent lap */
-  .loader.sweeping .ls-bar { animation: barline 1.6s linear infinite; }
-  .loader.sweeping .ls-bar-1 { animation-delay: -1.2s; }
-  .loader.sweeping .ls-bar-2 { animation-delay: -0.8s; }
-  .loader.sweeping .ls-bar-3 { animation-delay: -0.4s; }
-  @keyframes playhead { from { transform: translateX(6px); } to { transform: translateX(234px); } }
-  @keyframes barline {
-    0%   { stroke: var(--amber); opacity: .95; }
-    22%  { stroke: var(--ink-faint); opacity: .45; }
-    100% { stroke: var(--ink-faint); opacity: .45; }
-  }
+  .loader.sweeping .ls-tick { animation: barline 1.6s linear infinite; }
+  .loader.sweeping .ls-tick-1 { animation-delay: -1.2s; }
+  .loader.sweeping .ls-tick-2 { animation-delay: -0.8s; }
+  .loader.sweeping .ls-tick-3 { animation-delay: -0.4s; }
+  @keyframes playhead { from { transform: translateX(-100%); } to { transform: translateX(0); } }
+  @keyframes barline { 0% { opacity: .9; } 22% { opacity: 0; } 100% { opacity: 0; } }
   @media (prefers-reduced-motion: reduce) {
-    .loader.sweeping .ls-head { animation: none; transform: translateX(120px); }
-    .loader.sweeping .ls-bar { animation: none; }
+    .loader.sweeping .ls-sweep { animation: none; transform: translateX(-50%); }
+    .loader.sweeping .ls-tick { animation: none; }
   }
 
   .figure-actions { display: flex; gap: 6px; }
@@ -467,21 +483,47 @@
     font-size: 13px; text-transform: none; letter-spacing: 0;
     padding: 2px 9px; min-width: 30px; line-height: 1.5;
   }
-  .exceptions {
-    font-size: 11px; color: var(--cyan-dim); line-height: 1.6;
-    border-left: 2px solid var(--cyan-dim); padding-left: 9px;
+  /* Under the staff: the controls down the left, and down the right the
+     alternates and what each one broke. The rule panel sits under the cost
+     chips because the cost is the number and the panel is what it is made
+     of - click another alternate and both change together. */
+  /* Side by side when the column has room for both, and the panel drops
+     under the controls when it does not. That is decided by the width of
+     this column, not of the window: the side panels can leave it narrow on
+     a wide screen, and a media query would keep the two side by side and
+     crush the buttons into a sliver. */
+  .under-staff { display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-start; }
+  .us-left { flex: 1 1 380px; min-width: 0; display: flex; flex-direction: column; gap: 14px; }
+  .us-right { flex: 1 0 300px; max-width: 460px; min-width: 0; display: flex;
+              flex-direction: column; align-items: flex-end; gap: 10px; }
+  .us-right .chips { justify-content: flex-end; }
+  .rule-panel { width: 100%; display: flex; flex-direction: column; align-items: flex-end; gap: 10px; }
+  .rule-panel:empty { display: none; }
+  .rp-card {
+    width: 100%; background: var(--panel-deep); border: 1px solid var(--panel-edge);
+    border-radius: 6px; padding: 12px 14px;
   }
-  .exceptions b { color: var(--cyan); font-weight: 400; }
-  .exceptions b.exc-err-heading { color: var(--red); }
-  .exceptions .exc-what { color: var(--cyan-dim); margin-top: 5px; }
-  .exceptions .exc-what.exc-err { color: var(--red); }
-  .exceptions .exc-why { color: var(--ink-faint); margin: 2px 0 0 14px; max-width: 74ch; }
+  .rp-tag {
+    display: inline-block; font-size: 10px; letter-spacing: .12em; text-transform: uppercase;
+    padding: 5px 9px; border-radius: 4px;
+    color: var(--cyan); border: 1px solid var(--cyan-dim); background: #111A19;
+  }
+  .rp-tag.rp-err { color: var(--red); border-color: #5B2E28; background: #1E1413; }
+  .rp-item + .rp-item { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--panel-edge); }
+  .rp-tag + .rp-item { margin-top: 10px; }
+  .rp-where { font-size: 12px; color: var(--amber); }
+  .rp-where .rp-voices { color: var(--ink); margin-left: 8px; }
+  .rp-msg { margin-top: 4px; font-size: 14px; line-height: 1.45; color: var(--paper-ink); }
+  .rp-why { margin-top: 6px; font-size: 12px; line-height: 1.6; color: var(--ink); }
+  .rp-why b { font-weight: 400; color: var(--cyan); }
+  .rp-err-card .rp-why b { color: var(--red); }
+  /* the engine changed an inversion to make the progression work */
+  .rp-note { font-size: 12px; line-height: 1.5; color: var(--cyan-dim); text-align: right; }
 
   .transport {
     display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
     padding-bottom: 2px;
   }
-  .transport .chips { margin-left: auto; }
   .prelude-pick {
     background: var(--panel-deep); color: var(--ink);
     border: 1px solid var(--panel-edge); border-radius: 3px;
@@ -568,17 +610,23 @@
           <line class="ls-line" x1="6" y1="32" x2="234" y2="32"/>
           <line class="ls-line" x1="6" y1="42" x2="234" y2="42"/>
           <line class="ls-line" x1="6" y1="52" x2="234" y2="52"/>
-          <line class="ls-bar ls-bar-1" x1="63" y1="12" x2="63" y2="52"/>
-          <line class="ls-bar ls-bar-2" x1="120" y1="12" x2="120" y2="52"/>
-          <line class="ls-bar ls-bar-3" x1="177" y1="12" x2="177" y2="52"/>
-          <rect class="ls-trail" id="busyTrail" x="6" y="12" width="0" height="40"/>
-          <g class="ls-head" id="busyFill"><rect x="-1.5" y="4" width="3" height="56" rx="1.5"/></g>
+          <line class="ls-bar" x1="63" y1="12" x2="63" y2="52"/>
+          <line class="ls-bar" x1="120" y1="12" x2="120" y2="52"/>
+          <line class="ls-bar" x1="177" y1="12" x2="177" y2="52"/>
         </svg>
+        <div class="ls-track" aria-hidden="true">
+          <div class="ls-tick ls-tick-1"></div>
+          <div class="ls-tick ls-tick-2"></div>
+          <div class="ls-tick ls-tick-3"></div>
+          <div class="ls-sweep" id="busyFill"><div class="ls-trail"></div><div class="ls-head"></div></div>
+        </div>
       </div>
       <div class="bar-label" id="busyLabel">working</div>
     </div>
   </div>
 
+  <div class="under-staff">
+  <div class="us-left">
   <div class="transport">
     <button class="primary" id="go">Realize</button>
     <button id="play" class="icon-btn" disabled
@@ -599,7 +647,6 @@
     <a id="export" class="export" href="#" download>Export MIDI</a>
     <button id="reset" class="danger"
             title="Empty the staff, start again, and ask the questions you turned off">Reset</button>
-    <div class="chips" id="alts"></div>
   </div>
 
   <div class="staff-actions">
@@ -625,6 +672,13 @@
   </div>
 
   <div class="status" id="status"></div>
+  </div>
+
+  <div class="us-right">
+    <div class="chips" id="alts"></div>
+    <div class="rule-panel" id="exceptions" aria-live="polite"></div>
+  </div>
+  </div>
 
   <div class="controls">
     <div class="field">
@@ -665,7 +719,6 @@
 
   </div>
 
-  <div class="exceptions" id="exceptions"></div>
   <div class="options" id="options"></div>
 
   <div class="hint">
@@ -1522,7 +1575,7 @@
      conditional in every line of it. */
 
   var BEAT_W = 46;         // the least a beat may be worth in pixels
-  var COLUMN_W = 22;       // the least room one struck column needs;
+  var COLUMN_W = 30;       // the least room one struck column needs;
                            // a dotted eighth with its flag needs this much
   var SYS_GAP = 40;        // air between one system and the next
   var METER_W = 34;        // reserved on every system, printed on the first
@@ -1779,8 +1832,11 @@
     for (var f = 0; f < count; f++) {
       var fl = inSpaces(sx, tipY + (up ? 1 : -1) * f * 0.62 * SPACE, "flag");
       var k = up ? 1 : -1;
-      fl.appendChild(el("path", { d: "M0 0 C0.05 " + (0.55 * k) + " 0.95 " + (0.85 * k) + " 0.72 " +
-        (1.9 * k) + " C0.72 " + (1.25 * k) + " 0.28 " + (0.98 * k) + " 0 " + (0.85 * k) + " Z" }));
+      /* A flag leaves the stem thick and sweeps out to a thin tail, down
+         from an up stem and up from a down one. Its root is under half a
+         space: any fatter and it reads as part of the notehead. */
+      fl.appendChild(el("path", { d: "M0 0 C0.12 " + (0.62 * k) + " 1.02 " + (0.98 * k) + " 0.8 " +
+        (2.3 * k) + " C0.76 " + (1.72 * k) + " 0.42 " + (1.12 * k) + " 0 " + (0.42 * k) + " Z" }));
       g.appendChild(fl);
     }
   }
@@ -1866,15 +1922,28 @@
                                 : (stack.length > 1 ? i > 0 : d < MIDDLE_C);
 
         // silence in this voice from when its stack began to when it enters
-        if (n.start > first + 1e-6) {
+        /* A rest and the note that ends it share one step of the grid, and a
+           sixteenth is not wide enough to hold both. Drawn on the grid they
+           run together into a single unreadable mark, so the rest leans left
+           and the note leans right - the uneven spacing an engraver gives
+           them. */
+        var restsFirst = n.start > first + 1e-6;
+        if (restsFirst) {
           spell(first, n.start - first, beatLen).forEach(function (p) {
-            rest(g, p.value, xAt(p.t), yOf(d) + (up ? -1 : 1) * SPACE);
+            /* On its beat the other voices are already sounding: the note
+               below it in the stack, and the running line's own rest above.
+               Stacked vertically it hit one or the other, so it steps right,
+               past the lower voice's notehead, at its own note's height. The
+               wide bars leave room for it before the note it waits for. */
+            // clear of the lower note's head and its ledger line, which reaches 13px out
+            rest(g, p.value, xAt(p.t) + 28, yOf(d));
           });
         }
 
         var pieces = spell(n.start, n.beats, beatLen);
         var drawn = pieces.map(function (p) {
           var x = xAt(p.t);
+          if (restsFirst && Math.abs(p.t - n.start) < 1e-6) x += HEAD_RX * 2 + 12;
           // a head that would touch a running note at the same moment steps right
           if (runningNear(p.t, d)) x += HEAD_RX * 2 + 2;
           var shape = p.value[1];
@@ -1886,10 +1955,12 @@
             if (FLAGS[shape]) flags(g, FLAGS[shape], sx, tip, up);
           }
           dots(g, p.value[2], x, d);
-          return { x: x, y: y };
+          return { x: x, y: y, dots: p.value[2] };
         });
         for (var k = 0; k + 1 < drawn.length; k++) {
-          tie(g, drawn[k].x + HEAD_RX, drawn[k + 1].x - HEAD_RX, drawn[k].y, up);
+          // a dotted note's tie leaves from beyond its dot, or the dot reads as the tie's end
+          var from = drawn[k].x + HEAD_RX + (drawn[k].dots ? 6 + 7 * drawn[k].dots : 0);
+          tie(g, from, drawn[k + 1].x - HEAD_RX, drawn[k].y, up);
         }
       });
     });
@@ -2394,22 +2465,16 @@
      For that stretch the bar sweeps instead of claiming a percentage. */
   function setProgress(fraction, label) {
     var box = document.getElementById("busyBar");
-    var head = document.getElementById("busyFill");
-    var trail = document.getElementById("busyTrail");
+    var sweep = document.getElementById("busyFill");
     if (fraction === null || fraction === undefined) {
-      /* The inline position has to go, not just be overruled. Whatever the
-         playhead was last parked at would otherwise sit on the element when
-         the loop starts - the same trap that once pinned the old sweeping
-         bar at zero width and made it look broken instead of busy. */
-      head.style.transform = "";
-      trail.setAttribute("width", 0);
+      /* The inline position has to go, not just be overruled, or the loop
+         would start from wherever the playhead was last parked. */
+      sweep.style.transform = "";
       box.classList.add("sweeping");
     } else {
       box.classList.remove("sweeping");
       var clamped = Math.max(0, Math.min(1, fraction));
-      var x = 6 + clamped * 228;
-      head.style.transform = "translateX(" + x + "px)";
-      trail.setAttribute("width", x - 6);
+      sweep.style.transform = "translateX(" + ((clamped - 1) * 100) + "%)";
     }
     if (label) document.getElementById("busyLabel").textContent = label;
   }
@@ -2472,11 +2537,11 @@
        second freeze immediately after the first, which is why it waits for
        a frame and holds the busy state rather than doing it in silence. */
     setBusy(true, "building the file");
+    setProgress(null, "building the file");
     return painted()
       .then(function () {
-        setProgress(null, "building the file");
         return backend.midiUrl({
-          key: document.getElementById("key").value,
+          key: currentKey(),
           progression: document.getElementById("prog").value,
           profile: PROFILE,
           position: document.getElementById("position").value,
@@ -2497,44 +2562,66 @@
       });
   }
 
+  /* What the chosen alternate broke, and why - under the cost chips, so the
+     number and what it is made of sit together.
+
+     Two kinds, and they are told apart because the explanation a reader
+     needs is different. A rule broken with a reason was weighed and
+     allowed, so it says why it was allowed here. A plain broken rule was
+     not, so it says what the rule is there to protect - the explanation
+     the engine keeps for every rule. Each says which chord and which
+     voices, because "the leading tone is doubled" is no use until you can
+     find it on the staff. */
   function renderExceptions(payload) {
     var box = document.getElementById("exceptions");
     box.innerHTML = "";
     if (!payload || !payload.ok) return;
-    var errors = payload.results[currentIndex].violations || [];
-    if (errors.length) {
-      var errHeading = document.createElement("div");
-      errHeading.innerHTML = "<b class=\"exc-err-heading\">" + errors.length +
-        " rule" + (errors.length > 1 ? "s" : "") + " broken</b>";
-      box.appendChild(errHeading);
-      errors.forEach(function (item) {
-        var line = document.createElement("div");
-        line.className = "exc-what exc-err";
-        line.textContent = "chord " + (item.chord + 1) + " · " + item.message;
-        box.appendChild(line);
-      });
+    var result = payload.results[currentIndex];
+    var numerals = result.numerals || payload.numerals || [];
+    var errors = result.violations || [];
+    var waived = result.exceptions || [];
+
+    function el(tag, cls, text) {
+      var node = document.createElement(tag);
+      if (cls) node.className = cls;
+      if (text !== undefined) node.textContent = text;
+      return node;
     }
-    var waived = payload.results[currentIndex].exceptions || [];
-    if (!waived.length) return;
-    var heading = document.createElement("div");
-    // Not all of these were chosen: a waived rule was broken on purpose,
-    // while a priced warning was broken because every alternative was
-    // worse. What they share is that the engine knew and can say why.
-    heading.innerHTML = "<b>" + waived.length + " rule" +
-      (waived.length > 1 ? "s" : "") + " broken with a reason</b>";
-    box.appendChild(heading);
-    waived.forEach(function (item) {
-      var line = document.createElement("div");
-      line.className = "exc-what";
-      line.textContent = "chord " + (item.chord + 1) + " · " + item.message;
-      box.appendChild(line);
-      if (item.reason) {
-        var why = document.createElement("div");
-        why.className = "exc-why";
-        why.textContent = item.reason;
-        box.appendChild(why);
-      }
-    });
+
+    if (!errors.length && !waived.length) {
+      box.appendChild(el("span", "rp-tag", "No violations"));
+      return;
+    }
+
+    function card(items, kind) {
+      var wrap = el("div", "rp-card" + (kind === "err" ? " rp-err-card" : ""));
+      var count = items.length + " rule" + (items.length > 1 ? "s" : "") + " broken";
+      wrap.appendChild(el("span", "rp-tag" + (kind === "err" ? " rp-err" : ""),
+                          kind === "err" ? count : count + " with a reason"));
+      items.forEach(function (item) {
+        var row = el("div", "rp-item");
+        var where = el("div", "rp-where",
+          "chord " + (item.chord + 1) + (numerals[item.chord] ? " \u00b7 " + numerals[item.chord] : ""));
+        if (item.voices && item.voices.length) {
+          where.appendChild(el("span", "rp-voices", item.voices.join(", ")));
+        }
+        row.appendChild(where);
+        row.appendChild(el("div", "rp-msg", item.message));
+        var because = kind === "err" ? item.explanation : (item.reason || item.explanation);
+        if (because) {
+          var why = el("div", "rp-why");
+          why.appendChild(el("b", "", kind === "err" || !item.reason
+                                      ? "Why it's a rule: " : "Why it's allowed here: "));
+          why.appendChild(document.createTextNode(because));
+          row.appendChild(why);
+        }
+        wrap.appendChild(row);
+      });
+      box.appendChild(wrap);
+    }
+
+    if (errors.length) card(errors, "err");
+    if (waived.length) card(waived, "why");
   }
 
   function renderAlternates(payload) {
@@ -2661,12 +2748,12 @@
     var box = document.getElementById("options");
     if (!melody) { box.innerHTML = ""; choices = []; return Promise.resolve(); }
 
-    setBusy(true, "reading the melody");
+    setBusy(true, "finding chords");
+    setProgress(null, "finding chords");
     return painted()
       .then(function () {
-        setProgress(null, "finding chords");
         return backend.candidates({
-          key: document.getElementById("key").value,
+          key: currentKey(),
           soprano: melody,
           profile: PROFILE,
           /* so a chord already written is among the ones offered, even when
@@ -2716,7 +2803,7 @@
         }).map(function (entry) { return entry.note; });
         renderOptions(payload);
         if (orphans.length) {
-          setStatus("nothing in " + document.getElementById("key").value +
+          setStatus("nothing in " + currentKey() +
                     " can carry " + orphans.join(", ") +
                     " - change the note, or the key", "err");
           return false;
@@ -2773,14 +2860,17 @@
       setStatus("write a progression, or pick a feeling or a melody", "ok");
       return Promise.resolve();
     }
-    setBusy(true, "reading the progression");
+    /* The loop is started before painted(), so the frame it waits for is
+       the one that starts the animation. Started inside the .then, it went
+       straight into a solve that holds the thread, and was never drawn. */
+    setBusy(true, "solving");
+    setProgress(null, "solving");
     setStatus("working…");
 
     return painted()
       .then(function () {
-        setProgress(null, "solving");
         return backend.realize({
-          key: document.getElementById("key").value,
+          key: currentKey(),
           progression: document.getElementById("prog").value,
           profile: PROFILE,
           soprano: melodyText(),
@@ -2796,6 +2886,7 @@
           current = null;
           render(null, 0);
           renderAlternates(null);
+          renderExceptions(null);
           document.getElementById("play").disabled = true;
           stopPlayback();
           ["prelude", "keep", "figuresOn", "intervals"].forEach(function (id) {
@@ -2836,7 +2927,7 @@
         var swaps = payload.results[currentIndex].substitutions || [];
         if (swaps.length) {
           var note = document.createElement("div");
-          note.style.color = "var(--cyan-dim)";
+          note.className = "rp-note";
           note.textContent = "as written it had no answer; re-voiced " +
             swaps.map(function (x) {
               return x.written + " as " + x.used + " (chord " + (x.chord + 1) + ")";
@@ -2900,24 +2991,72 @@
     tonicSelect.value = list.indexOf(want) >= 0 ? want : list[0];
   }
 
+  /* A tonic spelled the way the given mode's list spells it: minor in lower
+     case (a, f#, bb), major capitalised on the letter alone (A, F#, Bb).
+     Upper-casing the whole name used to turn bb into BB, which neither list
+     holds, so B-flat minor switched to major landed on C. */
+  function spellTonic(t, mode) {
+    t = String(t || "");
+    return mode === "minor" ? t.toLowerCase()
+                            : t.charAt(0).toUpperCase() + t.slice(1).toLowerCase();
+  }
+
+  /* Make every key control agree with what the two visible ones show.
+
+     A refresh is what needs this. The browser puts back the last tonic and
+     mode the writer chose, separately, and after this script has already
+     built the tonic list in major spelling - so it can show "minor" beside a
+     capital A. The page never builds that pair, and the key it spells,
+     "A minor", is not one the hidden select holds. Setting a select to a
+     value it does not have leaves it with no value at all, and the engine
+     was then asked to read '' as a key. */
+  function reconcileKey() {
+    var mode = modeSelect.value === "minor" ? "minor" : "major";
+    fillTonics(mode, spellTonic(tonicSelect.value, mode));
+    keySelect.value = tonicSelect.value + " " + mode;
+  }
+
+  // what every request to the engine reads; never empty
+  function currentKey() {
+    if (!keySelect.value) reconcileKey();
+    return keySelect.value || "C major";
+  }
+
   /* Changing the mode keeps the same letter where that letter exists in the
      other mode - C major to C minor rather than to A minor - because the
      writer picked the letter and only meant to change the mode. */
   function syncKey() {
-    var chosenKey = tonicSelect.value + " " + modeSelect.value;
-    if (keySelect.value === chosenKey) return;
-    keySelect.value = chosenKey;
+    var mode = modeSelect.value === "minor" ? "minor" : "major";
+    if (tonicSelect.value !== spellTonic(tonicSelect.value, mode)) reconcileKey();
+    var chosenKey = spellTonic(tonicSelect.value, mode) + " " + mode;
+    if (keySelect.value !== chosenKey) {
+      keySelect.value = chosenKey;
+      if (keySelect.value !== chosenKey) reconcileKey();
+    }
+    // announce only a real change of key, however the controls got here
+    if (keySelect.value === lastKey) return;
     keySelect.dispatchEvent(new Event("change"));
   }
 
   fillTonics("major", "C");
   modeSelect.addEventListener("change", function () {
-    var was = tonicSelect.value;
-    var swap = modeSelect.value === "minor" ? was.toLowerCase() : was.toUpperCase();
-    fillTonics(modeSelect.value, swap);
+    fillTonics(modeSelect.value, spellTonic(tonicSelect.value, modeSelect.value));
     syncKey();
   });
   tonicSelect.addEventListener("change", syncKey);
+
+  /* After the browser has had its chance to restore the controls, take what
+     it restored as the key - the progression box is restored too, and a
+     minor progression should come back in its minor key - but in a form the
+     page can actually use. No change event: nothing was changed, only put
+     back, and a change here would try to transpose the melody. */
+  function settleRestoredKey() {
+    reconcileKey();
+    lastKey = keySelect.value;
+  }
+  document.addEventListener("DOMContentLoaded", settleRestoredKey);
+  window.addEventListener("load", settleRestoredKey);
+  window.addEventListener("pageshow", settleRestoredKey);
 
   /* insert buttons for the characters a keyboard hides */
   [["°", "diminished, as in vii°"], ["ø", "half diminished, as in viiø7"],
@@ -3069,7 +3208,7 @@
      key box a few inches away; the mode is the part the notes do not tell
      you at a glance. */
   function showHeldKey() {
-    var key = document.getElementById("key").value;
+    var key = currentKey();
     document.getElementById("heldKey").textContent =
       keeping ? (key.indexOf("minor") >= 0 ? "minor" : "major") : "";
   }
@@ -3217,7 +3356,7 @@
        progression with the tune would be handing over an answer that was
        never the tune's to give. */
     function load(item) {
-      document.getElementById("key").value = item.key;
+      keySelect.value = item.key;
       showKey(item.key);
       lastKey = item.key;
       document.getElementById("prog").value = item.soprano ? "" : item.prog;
@@ -3419,7 +3558,7 @@
       catch (err) { return; }
       if (!dropped || !dropped.prog) return;
 
-      var here = document.getElementById("key").value;
+      var here = currentKey();
       if (isMinorKey(dropped.key) !== isMinorKey(here)) {
         setStatus(dropped.feeling + " is written in " + dropped.key +
                   " and the page is in " + here +
@@ -3480,7 +3619,7 @@
           message: text,
           /* what the page was doing, which is most of what makes a
              suggestion actionable */
-          context: document.getElementById("key").value + "  " +
+          context: currentKey() + "  " +
                    document.getElementById("prog").value,
           version: document.getElementById("version").textContent,
         }),
@@ -3550,8 +3689,11 @@
     showHeldKey();          // the held tune is in the new key now
     setBusy(true, "transposing");
     setProgress(null, "transposing");
-    return backend.transpose({ from: from, to: to, soprano: melodyText(),
-                               profile: PROFILE })
+    return painted()
+      .then(function () {
+        return backend.transpose({ from: from, to: to, soprano: melodyText(),
+                                   profile: PROFILE });
+      })
       .then(function (answer) {
         setBusy(false);
         if (answer && answer.ok && answer.soprano) {

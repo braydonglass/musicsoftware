@@ -240,31 +240,47 @@
      loop and each barline answers as it passes. It moves by transform, which
      the compositor animates off the main thread, so it keeps crossing while
      the engine has the thread locked. */
-  .loader { width: min(300px, 70%); }
-  .loader svg { display: block; width: 100%; height: auto; overflow: visible; }
+  /* Only the staff is SVG. Everything that moves is an ordinary element
+     moving by transform or opacity, because those are the two properties
+     the compositor animates on its own thread - and the solve in the static
+     build holds the main thread for as long as it runs. An SVG element
+     animated the same way is left to the main thread in Chrome, so a
+     playhead drawn in SVG simply stopped for the whole solve.
+
+     The track spans the staff (x 6 to 234 of the 240-wide drawing). The
+     sweep is a track-wide block whose right edge is the playhead, so
+     translating it from -100% to 0 carries the head across, and its own
+     background is the filled bar behind the head. */
+  .loader { position: relative; width: min(300px, 70%); }
+  .loader svg { display: block; width: 100%; height: auto; }
   .ls-line { stroke: var(--ink-faint); stroke-width: 1.2; opacity: .7; }
   .ls-bar { stroke: var(--ink-faint); stroke-width: 1.2; opacity: .45; }
-  .ls-trail { fill: var(--amber); opacity: .12; transition: width .18s linear; }
-  .ls-head rect { fill: var(--amber); }
-  .ls-head { transform: translateX(6px); transition: transform .18s linear; }
+  .ls-track { position: absolute; top: 0; bottom: 0; left: 2.5%; right: 2.5%; overflow: hidden; }
+  .ls-sweep {
+    position: absolute; inset: 0; transform: translateX(-100%);
+    transition: transform .18s linear; will-change: transform;
+  }
+  .ls-trail { position: absolute; left: 0; right: 0; top: 18.75%; bottom: 18.75%;
+              background: var(--amber); opacity: .12; }
+  .ls-head { position: absolute; right: 0; top: 6.25%; bottom: 6.25%; width: 3px;
+             border-radius: 1.5px; background: var(--amber); }
+  .ls-tick { position: absolute; top: 18.75%; bottom: 18.75%; width: 2px; margin-left: -1px;
+             background: var(--amber); opacity: 0; }
+  .ls-tick-1 { left: 25%; } .ls-tick-2 { left: 50%; } .ls-tick-3 { left: 75%; }
   .bar-label { opacity: .85; }
   .loader.sweeping .ls-trail { opacity: 0; }
-  .loader.sweeping .ls-head { transition: none; animation: playhead 1.6s linear infinite; }
+  .loader.sweeping .ls-sweep { transition: none; animation: playhead 1.6s linear infinite; }
   /* negative delays put each barline's flash exactly where the head crosses
      it, from the first frame rather than after a first silent lap */
-  .loader.sweeping .ls-bar { animation: barline 1.6s linear infinite; }
-  .loader.sweeping .ls-bar-1 { animation-delay: -1.2s; }
-  .loader.sweeping .ls-bar-2 { animation-delay: -0.8s; }
-  .loader.sweeping .ls-bar-3 { animation-delay: -0.4s; }
-  @keyframes playhead { from { transform: translateX(6px); } to { transform: translateX(234px); } }
-  @keyframes barline {
-    0%   { stroke: var(--amber); opacity: .95; }
-    22%  { stroke: var(--ink-faint); opacity: .45; }
-    100% { stroke: var(--ink-faint); opacity: .45; }
-  }
+  .loader.sweeping .ls-tick { animation: barline 1.6s linear infinite; }
+  .loader.sweeping .ls-tick-1 { animation-delay: -1.2s; }
+  .loader.sweeping .ls-tick-2 { animation-delay: -0.8s; }
+  .loader.sweeping .ls-tick-3 { animation-delay: -0.4s; }
+  @keyframes playhead { from { transform: translateX(-100%); } to { transform: translateX(0); } }
+  @keyframes barline { 0% { opacity: .9; } 22% { opacity: 0; } 100% { opacity: 0; } }
   @media (prefers-reduced-motion: reduce) {
-    .loader.sweeping .ls-head { animation: none; transform: translateX(120px); }
-    .loader.sweeping .ls-bar { animation: none; }
+    .loader.sweeping .ls-sweep { animation: none; transform: translateX(-50%); }
+    .loader.sweeping .ls-tick { animation: none; }
   }
 
   .figure-actions { display: flex; gap: 6px; }
@@ -468,21 +484,47 @@
     font-size: 13px; text-transform: none; letter-spacing: 0;
     padding: 2px 9px; min-width: 30px; line-height: 1.5;
   }
-  .exceptions {
-    font-size: 11px; color: var(--cyan-dim); line-height: 1.6;
-    border-left: 2px solid var(--cyan-dim); padding-left: 9px;
+  /* Under the staff: the controls down the left, and down the right the
+     alternates and what each one broke. The rule panel sits under the cost
+     chips because the cost is the number and the panel is what it is made
+     of - click another alternate and both change together. */
+  /* Side by side when the column has room for both, and the panel drops
+     under the controls when it does not. That is decided by the width of
+     this column, not of the window: the side panels can leave it narrow on
+     a wide screen, and a media query would keep the two side by side and
+     crush the buttons into a sliver. */
+  .under-staff { display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-start; }
+  .us-left { flex: 1 1 380px; min-width: 0; display: flex; flex-direction: column; gap: 14px; }
+  .us-right { flex: 1 0 300px; max-width: 460px; min-width: 0; display: flex;
+              flex-direction: column; align-items: flex-end; gap: 10px; }
+  .us-right .chips { justify-content: flex-end; }
+  .rule-panel { width: 100%; display: flex; flex-direction: column; align-items: flex-end; gap: 10px; }
+  .rule-panel:empty { display: none; }
+  .rp-card {
+    width: 100%; background: var(--panel-deep); border: 1px solid var(--panel-edge);
+    border-radius: 6px; padding: 12px 14px;
   }
-  .exceptions b { color: var(--cyan); font-weight: 400; }
-  .exceptions b.exc-err-heading { color: var(--red); }
-  .exceptions .exc-what { color: var(--cyan-dim); margin-top: 5px; }
-  .exceptions .exc-what.exc-err { color: var(--red); }
-  .exceptions .exc-why { color: var(--ink-faint); margin: 2px 0 0 14px; max-width: 74ch; }
+  .rp-tag {
+    display: inline-block; font-size: 10px; letter-spacing: .12em; text-transform: uppercase;
+    padding: 5px 9px; border-radius: 4px;
+    color: var(--cyan); border: 1px solid var(--cyan-dim); background: #111A19;
+  }
+  .rp-tag.rp-err { color: var(--red); border-color: #5B2E28; background: #1E1413; }
+  .rp-item + .rp-item { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--panel-edge); }
+  .rp-tag + .rp-item { margin-top: 10px; }
+  .rp-where { font-size: 12px; color: var(--amber); }
+  .rp-where .rp-voices { color: var(--ink); margin-left: 8px; }
+  .rp-msg { margin-top: 4px; font-size: 14px; line-height: 1.45; color: var(--paper-ink); }
+  .rp-why { margin-top: 6px; font-size: 12px; line-height: 1.6; color: var(--ink); }
+  .rp-why b { font-weight: 400; color: var(--cyan); }
+  .rp-err-card .rp-why b { color: var(--red); }
+  /* the engine changed an inversion to make the progression work */
+  .rp-note { font-size: 12px; line-height: 1.5; color: var(--cyan-dim); text-align: right; }
 
   .transport {
     display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
     padding-bottom: 2px;
   }
-  .transport .chips { margin-left: auto; }
   .prelude-pick {
     background: var(--panel-deep); color: var(--ink);
     border: 1px solid var(--panel-edge); border-radius: 3px;
@@ -569,17 +611,23 @@
           <line class="ls-line" x1="6" y1="32" x2="234" y2="32"/>
           <line class="ls-line" x1="6" y1="42" x2="234" y2="42"/>
           <line class="ls-line" x1="6" y1="52" x2="234" y2="52"/>
-          <line class="ls-bar ls-bar-1" x1="63" y1="12" x2="63" y2="52"/>
-          <line class="ls-bar ls-bar-2" x1="120" y1="12" x2="120" y2="52"/>
-          <line class="ls-bar ls-bar-3" x1="177" y1="12" x2="177" y2="52"/>
-          <rect class="ls-trail" id="busyTrail" x="6" y="12" width="0" height="40"/>
-          <g class="ls-head" id="busyFill"><rect x="-1.5" y="4" width="3" height="56" rx="1.5"/></g>
+          <line class="ls-bar" x1="63" y1="12" x2="63" y2="52"/>
+          <line class="ls-bar" x1="120" y1="12" x2="120" y2="52"/>
+          <line class="ls-bar" x1="177" y1="12" x2="177" y2="52"/>
         </svg>
+        <div class="ls-track" aria-hidden="true">
+          <div class="ls-tick ls-tick-1"></div>
+          <div class="ls-tick ls-tick-2"></div>
+          <div class="ls-tick ls-tick-3"></div>
+          <div class="ls-sweep" id="busyFill"><div class="ls-trail"></div><div class="ls-head"></div></div>
+        </div>
       </div>
       <div class="bar-label" id="busyLabel">working</div>
     </div>
   </div>
 
+  <div class="under-staff">
+  <div class="us-left">
   <div class="transport">
     <button class="primary" id="go">Realize</button>
     <button id="play" class="icon-btn" disabled
@@ -600,7 +648,6 @@
     <a id="export" class="export" href="#" download>Export MIDI</a>
     <button id="reset" class="danger"
             title="Empty the staff, start again, and ask the questions you turned off">Reset</button>
-    <div class="chips" id="alts"></div>
   </div>
 
   <div class="staff-actions">
@@ -626,6 +673,13 @@
   </div>
 
   <div class="status" id="status"></div>
+  </div>
+
+  <div class="us-right">
+    <div class="chips" id="alts"></div>
+    <div class="rule-panel" id="exceptions" aria-live="polite"></div>
+  </div>
+  </div>
 
   <div class="controls">
     <div class="field">
@@ -666,7 +720,6 @@
 
   </div>
 
-  <div class="exceptions" id="exceptions"></div>
   <div class="options" id="options"></div>
 
   <div class="hint">
@@ -756,16 +809,16 @@ window.HARMONY_SOURCES = {
 "harmony/core/solver.py": "\"\"\"Dynamic programming over a trellis.\n\nEach column is one chord, each node a legal voicing of it, each left-to-right\npath a complete realization. Soft rules make edges expensive; hard rules\ndelete them. The cheapest surviving path is the answer.\n\nNo rule logic lives here. The solver only knows that some number came back\ninfinite.\n\"\"\"\n\nfrom __future__ import annotations\n\nimport math\nfrom dataclasses import dataclass\n\nfrom .key import Key\nfrom .pitch import Pitch\nfrom .roman import ChordSpec, RomanNumeralError, parse\nfrom .rules.registry import Profile, TransitionContext, evaluate_transition\n\n# Rules that need to see three chords at once. A trellis edge spans two, so\n# these cannot bind during the search; the solver searches wide instead and\n# ranks the surviving paths by them afterwards.\nCONTEXT_RULES = {\"leap_recovery\"}\nSEARCH_WIDTH = 12          # paths kept per node so the ranking has choices\nMAX_RANKED = 400           # cap on how many finished paths get scored\nfrom .voice import Voicing\nfrom .voicing import describe_failure, generate\n\n\n@dataclass\nclass Realization:\n    voicings: list[Voicing]\n    cost: float\n    # The chords actually used. Identical to what was typed unless the solver\n    # was allowed to re-invert something to make the progression work.\n    specs: list[ChordSpec] | None = None\n\n    def substitutions(self, written: list[ChordSpec]) -> list[tuple[int, str, str]]:\n        \"\"\"(chord number, what was written, what was used) for anything changed.\"\"\"\n        if self.specs is None:\n            return []\n        return [(i + 1, w.numeral, u.numeral)\n                for i, (w, u) in enumerate(zip(written, self.specs))\n                if w.numeral != u.numeral]\n\n\nclass NoRealization(Exception):\n    \"\"\"Raised when every path dies, carrying the reason it died.\"\"\"\n\n\ndef realize(\n    specs: list[ChordSpec],\n    key: Key,\n    profile: Profile,\n    k: int = 1,\n    soprano: list[Pitch] | None = None,\n    allow_inversions: bool = False,\n) -> list[Realization]:\n    if not specs:\n        raise ValueError(\"the progression is empty\")\n    if soprano is not None and len(soprano) > len(specs):\n        raise ValueError(\n            f\"the melody has {len(soprano)} notes against {len(specs)} chords\"\n        )\n    if soprano is not None:\n        # A melody may be pinned in part. A ``None`` leaves that chord's\n        # soprano to the search, and a melody shorter than the progression\n        # leaves the chords past its end free - which is what happens when a\n        # chord is added to a progression whose tune is already chosen.\n        soprano = list(soprano) + [None] * (len(specs) - len(soprano))\n\n    columns: list[list[tuple[Voicing, float, ChordSpec]]] = []\n    for index, spec in enumerate(specs):\n        fixed = soprano[index] if soprano else None\n        column = [(v, c, spec) for v, c in generate(spec, key, profile, soprano=fixed)]\n\n        if allow_inversions:\n            # The bass line is the thing an inversion changes, so a substitution\n            # is never free: it costs enough that what was written wins whenever\n            # it can, and only gets used when nothing else works.\n            for alternative in _inversions_of(spec, key):\n                column += [(v, c + INVERSION_COST, alternative)\n                           for v, c in generate(alternative, key, profile, soprano=fixed)]\n\n        if not column:\n            if fixed is not None and generate(spec, key, profile):\n                raise NoRealization(\n                    f\"chord {index + 1}: {spec.numeral} cannot carry {fixed} in the \"\n                    f\"soprano. It spells \"\n                    f\"{' '.join(str(pc) for pc in spec.pitch_classes)}.\"\n                )\n            raise NoRealization(describe_failure(spec, key, profile))\n        columns.append(column)\n\n    all_transition_rules = profile.rules(\"transition\")\n    context_rules = [r for r in all_transition_rules if r.id in CONTEXT_RULES]\n    transition_rules = [r for r in all_transition_rules if r.id not in CONTEXT_RULES]\n    # Only hard rules can kill an edge. Soft violations ride along in the same\n    # list and would otherwise be blamed for a failure they did not cause.\n    hard_rule_ids = {rule.id for rule in transition_rules if rule.is_hard}\n    width = max(1, k)\n    # Search wider than asked when a context rule has to be satisfied after\n    # the fact, so there are alternatives left to choose between.\n    search_width = max(width, SEARCH_WIDTH) if context_rules else width\n\n    # history[i][j] is a list of (accumulated_cost, previous_j, previous_rank),\n    # cheapest first, at most `width` long.\n    history: list[list[list[tuple[float, int | None, int | None]]]] = [\n        [[(node_cost, None, None)] for _, node_cost, _ in columns[0]]\n    ]\n\n    for i in range(len(columns) - 1):\n        previous = history[-1]\n        layer: list[list[tuple[float, int | None, int | None]]] = []\n        blocked: dict[str, int] = {}\n\n        for target, (voicing_b, node_cost, spec_b) in enumerate(columns[i + 1]):\n            candidates: list[tuple[float, int, int]] = []\n            for source, (voicing_a, _, spec_a) in enumerate(columns[i]):\n                if not previous[source]:\n                    continue\n                ctx = TransitionContext(\n                    a=voicing_a, b=voicing_b,\n                    spec_a=spec_a, spec_b=spec_b,\n                    key=key, index=i, profile=profile,\n                )\n                violations, edge = evaluate_transition(ctx, transition_rules)\n                if math.isinf(edge):\n                    for violation in violations:\n                        if violation.rule_id in hard_rule_ids:\n                            blocked[violation.rule_id] = blocked.get(violation.rule_id, 0) + 1\n                    continue\n                for rank, (accumulated, _, _) in enumerate(previous[source]):\n                    candidates.append((accumulated + edge + node_cost, source, rank))\n            candidates.sort(key=lambda entry: entry[0])\n            layer.append(candidates[:search_width])\n\n        if not any(layer):\n            raise NoRealization(_explain_dead_transition(specs, i, blocked))\n        history.append(layer)\n\n    finals: list[tuple[float, int, int]] = []\n    for node, paths in enumerate(history[-1]):\n        for rank, (cost, _, _) in enumerate(paths):\n            finals.append((cost, node, rank))\n    finals.sort(key=lambda entry: entry[0])\n\n    ranked: list[tuple[int, float, list[Voicing]]] = []\n    seen: set[tuple] = set()\n    for cost, node, rank in finals[:MAX_RANKED]:\n        voicings, used = _backtrack(columns, history, node, rank)\n        signature = tuple(voicings)\n        if signature in seen:\n            continue\n        seen.add(signature)\n        faults = _context_faults(voicings, used, key, profile, context_rules)\n        ranked.append((faults, cost, voicings, used))\n\n    # Paths that satisfy the three-chord rules come first; cost decides the\n    # rest. When none satisfies them the cheapest still comes back, and the\n    # checker will say what is wrong with it rather than the engine pretending\n    # there was no answer.\n    ranked.sort(key=lambda entry: (entry[0], entry[1]))\n    return [Realization(voicings, cost, used)\n            for _, cost, voicings, used in ranked[:width]]\n\n\nINVERSION_COST = 6.0\n\n\ndef _inversions_of(spec: ChordSpec, key: Key) -> list[ChordSpec]:\n    \"\"\"Other inversions of the same chord, when none was written.\n\n    A figure the writer typed is a decision about the bass line and is left\n    alone. A bare numeral is not, so the solver may try the others.\n    \"\"\"\n    if spec.figure or spec.aug6_type or spec.tonicized_degree is not None:\n        return []\n    # First inversion only. A six-four is not a general-purpose substitute:\n    # it is unstable and belongs to the cadential, passing and pedal figures,\n    # none of which the solver is in a position to judge.\n    figures = [\"6\"] if spec.seventh_pc is None else [\"65\", \"43\", \"42\"]\n\n    # A dominant triad may also take its seventh. Three tones in four voices\n    # force a doubling, and a doubled tone approached in similar motion is a\n    # perfect interval approached in similar motion - which is why iv -> V is\n    # unwritable as a plain triad but fine as iv -> V7. The seventh gives the\n    # voices a fourth pitch to land on.\n    if spec.seventh_pc is None and spec.has_dominant_function:\n        figures = figures + [\"7\", \"65\"]\n\n    out = []\n    for figure in figures:\n        try:\n            out.append(parse(spec.numeral + figure, key))\n        except (RomanNumeralError, ValueError):\n            continue\n    return out\n\n\ndef _context_faults(voicings, specs, key, profile, rules) -> int:\n    \"\"\"How many three-chord rules this finished path breaks.\"\"\"\n    if not rules:\n        return 0\n    faults = 0\n    for index in range(len(voicings) - 1):\n        ctx = TransitionContext(\n            a=voicings[index], b=voicings[index + 1],\n            spec_a=specs[index], spec_b=specs[index + 1],\n            key=key, index=index, profile=profile,\n            previous=voicings[index - 1] if index > 0 else None,\n        )\n        violations, _ = evaluate_transition(ctx, rules, short_circuit=False)\n        faults += sum(1 for v in violations if not v.waived)\n    return faults\n\n\ndef solve(specs, key, profile, k: int = 1, soprano=None, reinvert: bool = True):\n    \"\"\"Realize as written, and re-voice if that answer has faults in it.\n\n    One place, so the CLI, the web layer and the tests cannot drift apart on\n    when a substitution is allowed.\n\n    The test used to be whether writing it as asked had *an* answer. That\n    was the same question while the motion rules deleted edges: no answer\n    meant no clean answer. Once those rules are priced instead - so that\n    every chord can follow every chord and the cost says what it took - the\n    two questions come apart, and asking the old one silently stopped the\n    re-voicing from ever running. I IV V I came back with an overlapping\n    bass and tenor rather than as I IV V65 I, because the faulty answer\n    existed and nothing looked at whether it was any good.\n\n    So a faulty answer is not enough. If what was written comes back with\n    something wrong in it, the inversions are tried too and the clean one\n    wins; if neither is clean, the cheaper one does, which is the one that\n    breaks less.\n    \"\"\"\n    from .checker import check, errors_only\n\n    def graded(results):\n        first = results[0]\n        used = first.specs or specs\n        return len(errors_only(check(first.voicings, used, key, profile)))\n\n    try:\n        written = realize(specs, key, profile, k=k, soprano=soprano)\n    except NoRealization:\n        if not reinvert:\n            raise\n        return realize(specs, key, profile, k=k, soprano=soprano,\n                       allow_inversions=True)\n\n    if not reinvert or graded(written) == 0:\n        return written\n    try:\n        revoiced = realize(specs, key, profile, k=k, soprano=soprano,\n                           allow_inversions=True)\n    except NoRealization:\n        return written\n    if graded(revoiced) < graded(written):\n        return revoiced\n    if graded(revoiced) == graded(written) and revoiced[0].cost < written[0].cost:\n        return revoiced\n    return written\n\n\ndef _backtrack(columns, history, node: int, rank: int):\n    voicings: list[Voicing] = []\n    used: list[ChordSpec] = []\n    for column in range(len(columns) - 1, -1, -1):\n        voicings.append(columns[column][node][0])\n        used.append(columns[column][node][2])\n        _, previous_node, previous_rank = history[column][node][rank]\n        if previous_node is None:\n            break\n        node, rank = previous_node, previous_rank\n    return list(reversed(voicings)), list(reversed(used))\n\n\ndef _explain_dead_transition(specs, index: int, blocked: dict[str, int]) -> str:\n    \"\"\"Say which move is impossible and which rules made it so.\n\n    \"No solution\" is never a useful answer. An unrealizable progression is\n    usually a real fact about the progression, and the reason is the lesson.\n    \"\"\"\n    move = f\"{specs[index].numeral} to {specs[index + 1].numeral}\"\n    if not blocked:\n        return f\"no voicing of {move} survives, and no rule claimed responsibility\"\n    ranked = sorted(blocked.items(), key=lambda kv: -kv[1])\n    detail = \", \".join(f\"{rule_id} ({count} times)\" for rule_id, count in ranked)\n    return (\n        f\"chords {index + 1} to {index + 2} ({move}) cannot be connected: every \"\n        f\"pairing was rejected by {detail}\"\n    )\n",
 "harmony/core/voice.py": "\"\"\"The four-voice chord, kept in its own module so rules and the voicing\ngenerator can both import it without a cycle.\"\"\"\n\nfrom __future__ import annotations\n\nfrom dataclasses import dataclass\n\nfrom .pitch import Pitch\n\nVOICE_NAMES = (\"soprano\", \"alto\", \"tenor\", \"bass\")\n\n# Adjacent pairs, high to low. Spacing and overlap care about these.\nADJACENT_PAIRS = ((\"soprano\", \"alto\"), (\"alto\", \"tenor\"), (\"tenor\", \"bass\"))\n\n# All six pairs. Parallel motion cares about every one.\nALL_PAIRS = (\n    (\"soprano\", \"alto\"), (\"soprano\", \"tenor\"), (\"soprano\", \"bass\"),\n    (\"alto\", \"tenor\"), (\"alto\", \"bass\"), (\"tenor\", \"bass\"),\n)\n\nOUTER_PAIR = (\"soprano\", \"bass\")\n\n\n@dataclass(frozen=True)\nclass Voicing:\n    soprano: Pitch\n    alto: Pitch\n    tenor: Pitch\n    bass: Pitch\n\n    def __getitem__(self, name: str) -> Pitch:\n        return getattr(self, name)\n\n    @property\n    def pitches(self) -> tuple[Pitch, Pitch, Pitch, Pitch]:\n        \"\"\"High to low, matching VOICE_NAMES.\"\"\"\n        return (self.soprano, self.alto, self.tenor, self.bass)\n\n    def chromas(self) -> list[int]:\n        return [p.pitch_class.chroma for p in self.pitches]\n\n    def __str__(self) -> str:\n        return \" \".join(f\"{n[0].upper()}:{p}\" for n, p in zip(VOICE_NAMES, self.pitches))\n\n    __repr__ = __str__\n",
 "harmony/core/voicing.py": "\"\"\"Generate every voicing of a chord that is legal on its own terms.\n\nOnly state rules apply here. Whether a voicing is a good move *from* some\nother voicing is a transition question, and belongs to the solver.\n\"\"\"\n\nfrom __future__ import annotations\n\nimport math\n\nfrom .key import Key\nfrom .pitch import Pitch, PitchClass\nfrom .roman import ChordSpec\nfrom .rules.registry import Profile, StateContext, evaluate_state\nfrom .voice import Voicing\n\n\ndef pitches_in_range(pc: PitchClass, low: Pitch, high: Pitch) -> list[Pitch]:\n    \"\"\"Every octave placement of a pitch class that fits a voice.\"\"\"\n    out = []\n    for octave in range(low.octave - 1, high.octave + 2):\n        pitch = pc.at_octave(octave)\n        if low.midi <= pitch.midi <= high.midi:\n            out.append(pitch)\n    return out\n\n\ndef candidates(spec: ChordSpec, voice: str, profile: Profile) -> list[Pitch]:\n    low, high = profile.ranges[voice]\n    out: list[Pitch] = []\n    for pc in spec.pitch_classes:\n        out.extend(pitches_in_range(pc, low, high))\n    return sorted(out, key=lambda p: p.midi)\n\n\ndef generate(spec: ChordSpec, key: Key, profile: Profile,\n             soprano: Pitch | None = None) -> list[tuple[Voicing, float]]:\n    \"\"\"All state-legal voicings, each with its soft-rule cost.\n\n    Built bass upward, pruning on crossing and spacing at every step rather\n    than producing the full cross product and filtering afterwards.\n\n    A given `soprano` pins the top voice, which is how a supplied melody is\n    harmonized: the search runs exactly as before, over a narrower column.\n    \"\"\"\n    # spacing and voice_crossing are already enforced by the manual pruning\n    # below, on every voice pair they cover - running them again on a\n    # candidate that already survived that pruning can never find a\n    # violation.\n    state_rules = [r for r in profile.rules(\"state\")\n                   if r.id not in (\"spacing\", \"voice_crossing\")]\n    low, high = profile.ranges[\"bass\"]\n    basses = pitches_in_range(spec.bass_pc, low, high)\n\n    tenors = candidates(spec, \"tenor\", profile)\n    altos = candidates(spec, \"alto\", profile)\n    sopranos = candidates(spec, \"soprano\", profile)\n    if soprano is not None:\n        sopranos = [p for p in sopranos if p == soprano]\n        if not sopranos:\n            return []\n\n    out: list[tuple[Voicing, float]] = []\n    for bass in basses:\n        for tenor in tenors:\n            if tenor.midi < bass.midi:\n                continue                                  # crossing\n            for alto in altos:\n                if alto.midi < tenor.midi:\n                    continue                              # crossing\n                if alto.midi - tenor.midi > 12:\n                    continue                              # spacing\n                for soprano in sopranos:\n                    if soprano.midi < alto.midi:\n                        continue                          # crossing\n                    if soprano.midi - alto.midi > 12:\n                        continue                          # spacing\n                    voicing = Voicing(soprano, alto, tenor, bass)\n                    ctx = StateContext(voicing, spec, key, 0, profile)\n                    violations, cost = evaluate_state(ctx, state_rules)\n                    if math.isinf(cost):\n                        continue\n                    out.append((voicing, cost))\n    return out\n\n\ndef describe_failure(spec: ChordSpec, key: Key, profile: Profile) -> str:\n    \"\"\"Why a chord produced no voicings at all.\"\"\"\n    state_rules = profile.rules(\"state\")\n    reasons: dict[str, int] = {}\n    low, high = profile.ranges[\"bass\"]\n    if not pitches_in_range(spec.bass_pc, low, high):\n        return (f\"{spec.numeral} needs {spec.bass_pc} in the bass, which has no \"\n                f\"octave inside the bass range {low}-{high}\")\n    for bass in pitches_in_range(spec.bass_pc, low, high):\n        for tenor in candidates(spec, \"tenor\", profile):\n            for alto in candidates(spec, \"alto\", profile):\n                for soprano in candidates(spec, \"soprano\", profile):\n                    voicing = Voicing(soprano, alto, tenor, bass)\n                    ctx = StateContext(voicing, spec, key, 0, profile)\n                    violations, cost = evaluate_state(ctx, state_rules)\n                    for v in violations:\n                        reasons[v.rule_id] = reasons.get(v.rule_id, 0) + 1\n    if not reasons:\n        return f\"{spec.numeral} produced no voicings and no reasons, which is a bug\"\n    ranked = sorted(reasons.items(), key=lambda kv: -kv[1])\n    return (f\"{spec.numeral} has no legal voicing; every attempt was rejected by \"\n            + \", \".join(f\"{rule_id} ({count})\" for rule_id, count in ranked))\n",
-"harmony/version.py": "\"\"\"What this is, and when it was cut.\n\nKept here rather than derived from git, because the static build has no git\nto ask: the page is a single file served from anywhere, and it still has to\nbe able to say which version somebody is looking at. Bump both together.\n\"\"\"\n\nVERSION = \"1.3\"\nRELEASED = \"2026-09-06\"\n",
+"harmony/version.py": "\"\"\"What this is, and when it was cut.\n\nKept here rather than derived from git, because the static build has no git\nto ask: the page is a single file served from anywhere, and it still has to\nbe able to say which version somebody is looking at. Bump both together.\n\"\"\"\n\nVERSION = \"1.4\"\nRELEASED = \"2026-09-17\"\n",
 "harmony/web/__init__.py": "",
-"harmony/web/server.py": "\"\"\"A thin HTTP layer over the engine.\n\nStdlib only, to keep the package dependency-free. Swapping in Flask would\ntouch this file and nothing else.\n\nNo rule logic lives here. This module parses a request, calls the same\nfunctions the CLI calls, and serialises what comes back. Meter is 4/4 for a\nplain realization and never shown, because the engine stores it and the rules\nnever see it; a prelude form carries its own, since a waltz is in three.\n\"\"\"\n\nfrom __future__ import annotations\n\nimport json\nimport re\nimport sys\nfrom urllib.parse import parse_qs, urlparse\nfrom http.server import BaseHTTPRequestHandler, ThreadingHTTPServer\nfrom pathlib import Path\n\nfrom ..version import RELEASED, VERSION\nfrom ..core.checker import check, errors_only, explained_breaks\nfrom ..core.embellish import apply as place_figures\nfrom ..core.embellish import opportunities\nfrom ..core.key import Key\nfrom ..core.melody import (HOLE, candidates_for, parse_soprano, suggest,\n                           transpose, vocabulary_for, workable)\nfrom ..core.midi import encode as midi_encode\nfrom ..core.midi import to_bytes as midi_bytes\nfrom ..core.prelude import BY_ID as PRELUDE_FORMS\nfrom ..core.prelude import FORMS as PRELUDE_FORM_LIST\nfrom ..core.prelude import figurate, ladder_for\nfrom ..core.prelude import spans as prelude_spans\nfrom ..core.roman import RomanNumeralError, parse_progression\nfrom ..core.roman import parse as parse_roman\nfrom ..core.rules.registry import PROFILE_DIR, Profile\nfrom ..core.rules.state import position_of\nfrom ..core.solver import NoRealization, solve\nfrom ..core.voice import VOICE_NAMES\n\nSTATIC = Path(__file__).resolve().parent / \"static\"\nCORE = Path(__file__).resolve().parents[1] / \"core\"\n\n\ndef _build_stamp() -> str:\n    \"\"\"Newest mtime across the engine, so a stale server shows its age.\"\"\"\n    import datetime\n    newest = max(p.stat().st_mtime for p in CORE.rglob(\"*.py\"))\n    return datetime.datetime.fromtimestamp(newest).strftime(\"%H:%M:%S\")\nDEFAULT_METER = (4, 4)\n\n\n# One ladder serves every form, so it is built as tall as the tallest needs.\nPRELUDE_RUNGS = max(form.rungs for form in PRELUDE_FORM_LIST)\n\n\ndef _meter_for(form_id: str | None) -> tuple[int, int]:\n    form = PRELUDE_FORMS.get(form_id or \"\")\n    return form.meter if form else DEFAULT_METER\n\n\ndef _note(pitch, key) -> dict:\n    \"\"\"A pitch in the shape the page draws from.\n\n    Only notes departing from the key signature get a written accidental;\n    the signature carries the rest.\n    \"\"\"\n    return {\"name\": str(pitch), \"midi\": pitch.midi, \"letter\": pitch.letter,\n            \"octave\": pitch.octave, \"alteration\": pitch.alteration,\n            \"accidental\": key.is_altered(pitch)}\n\n\ndef candidates_payload(request: dict) -> dict:\n    \"\"\"Which chords could carry each note of a melody.\n\n    A hole - a note the writer left for the engine - has no options to\n    offer and is passed straight through, so a partly pinned melody does\n    not break the chord chips underneath it.\n\n    Whatever is already written is offered too. The teaching vocabulary is\n    a starting list for an empty progression, not a fence around one that\n    exists: a writer who typed V+ and then held the soprano was shown no V+\n    to hold on to, and the chord silently became I. Under a D-sharp there\n    was nothing on offer at all.\n    \"\"\"\n    key = Key.parse(request.get(\"key\", \"C major\"))\n    profile = Profile.load(request.get(\"profile\", \"strict\"))\n    melody = parse_soprano(request.get(\"soprano\", \"\"))\n\n    vocabulary = list(vocabulary_for(key))\n    for token in (request.get(\"progression\") or \"\").split():\n        if token in vocabulary:\n            continue\n        try:\n            parse_roman(token, key)          # only what the key can spell\n        except (RomanNumeralError, ValueError):\n            continue\n        vocabulary.append(token)\n    # candidates_for, workable and suggest below all end up asking generate()\n    # the same (note index, chord) question - each only ever narrows what\n    # the one before it already searched - so one cache threaded through all\n    # three means each later call reuses that work instead of redoing it.\n    voicing_cache: dict = {}\n    found = [candidates_for(note, key, profile, vocabulary, index=i, cache=voicing_cache)\n             if note is not None else []\n             for i, note in enumerate(melody)]\n\n    # Then drop the ones that cannot be joined to their neighbours. Carrying\n    # the note is only half of what a chord has to do, and a button that\n    # errors when pressed is worse than no button - see workable().\n    usable = workable([[o[\"numeral\"] for o in options] for options in found],\n                      melody, key, profile, cache=voicing_cache)\n    found = [[o for o in options if o[\"numeral\"] in keep]\n             for options, keep in zip(found, usable)]\n\n    notes = [\n        {\"note\": str(note) if note is not None else HOLE,\n         \"free\": note is None,\n         \"options\": options}\n        for note, options in zip(melody, found)\n    ]\n    # One chord per note, chosen across the phrase rather than one note at a\n    # time - see suggest(). The page uses it wherever nothing is written.\n    return {\n        \"ok\": True,\n        \"suggested\": suggest([[o[\"numeral\"] for o in n[\"options\"]] for n in notes],\n                             key, melody, profile, cache=voicing_cache),\n        \"notes\": notes,\n    }\n\n\ndef transpose_payload(request: dict) -> dict:\n    \"\"\"The same melody on the same scale degrees of another key.\n\n    Kept in the engine rather than done in the page. The page would have to\n    grow its own idea of what a scale degree is and how a key spells one,\n    and that copy would drift from this one - which is the reason the solver\n    and the checker share their rules rather than each having a set.\n    \"\"\"\n    from_key = Key.parse(request.get(\"from\", \"C major\"))\n    to_key = Key.parse(request.get(\"to\", \"C major\"))\n    profile = Profile.load(request.get(\"profile\", \"strict\"))\n    melody = parse_soprano(request.get(\"soprano\", \"\"))\n    low, high = profile.ranges[\"soprano\"]\n    moved = transpose(melody, from_key, to_key, low, high)\n    return {\"ok\": True,\n            \"soprano\": \" \".join(HOLE if p is None else str(p) for p in moved)}\n\n\ndef parse_figures(text: str) -> list[str]:\n    \"\"\"Read the page's list of chosen figures from a URL.\n\n    Each one is a slot as Opportunity.slot writes it - chord, voice, kind\n    and note joined by colons - and they are separated by commas. Nothing\n    is validated here; apply() rebuilds the candidates and refuses whatever\n    no longer fits, which is what a stale or hand-edited URL deserves.\n    \"\"\"\n    return [token.strip() for token in text.split(\",\") if token.strip()]\n\n\ndef midi_for(params: dict) -> tuple[bytes, str]:\n    \"\"\"The bytes of an exported file and the name to save it under.\n\n    The export runs the same placement the page does, so what downloads is\n    what was on screen rather than the undecorated chords underneath it.\n    \"\"\"\n    key = Key.parse(params.get(\"key\") or \"C major\")\n    profile = Profile.load(params.get(\"profile\") or \"strict\")\n    progression = params.get(\"progression\") or \"\"\n    specs = parse_progression(progression, key)\n    index = max(0, int(params.get(\"alt\") or 0))\n    soprano_text = (params.get(\"soprano\") or \"\").strip()\n    melody = parse_soprano(soprano_text) if soprano_text else None\n\n    results = solve(specs, key, profile, k=index + 1, soprano=melody)\n    result = results[min(index, len(results) - 1)]\n    used = result.specs or specs\n    tempo = float(params.get(\"tempo\") or 84)\n\n    # A prelude replaces the chords rather than decorating them, so it takes\n    # the whole export: the figure runs off the block voicings, and the\n    # embellishments chosen for the block view have nothing to attach to.\n    form = PRELUDE_FORMS.get((params.get(\"form\") or \"\").strip())\n    if form is not None:\n        data = midi_encode(prelude_spans(figurate(result.voicings, used, form)),\n                           tempo_bpm=tempo, meter=form.meter)\n    else:\n        events, _ = place_figures(result.voicings, used, key, profile,\n                                  parse_figures(params.get(\"figures\") or \"\"))\n        data = midi_bytes(events, tempo_bpm=tempo, meter=DEFAULT_METER)\n\n    name = f\"{key} {progression}\" + (f\" {form.id}\" if form else \"\")\n    stem = re.sub(r\"[^A-Za-z0-9]+\", \"-\", name).strip(\"-\").lower() or \"harmony\"\n    return data, stem\n\n\ndef realize_payload(key_text: str, progression: str, profile_name: str,\n                    alternates: int, soprano_text: str = \"\",\n                    figures=None, position: str = \"any\") -> dict:\n    key = Key.parse(key_text)\n    profile = Profile.load(profile_name)\n    # Asked for per request rather than baked into the profile, because it is\n    # a choice about this phrase and not a rule about music.\n    if position in (\"open\", \"closed\"):\n        profile.params[\"position\"] = position\n    specs = parse_progression(progression, key)\n    melody = parse_soprano(soprano_text) if soprano_text.strip() else None\n    width = max(1, min(alternates, 5))\n    results = solve(specs, key, profile, k=width, soprano=melody)\n    chosen = [str(slot) for slot in (figures or [])]\n\n    out = []\n    for result in results:\n        used = result.specs or specs\n        graded = check(result.voicings, used, key, profile)\n        # judged against what is already chosen, so an offer the page\n        # draws is an offer that will take\n        offers = opportunities(result.voicings, used, key, profile,\n                               chosen=chosen)\n        events, refused = place_figures(result.voicings, used, key, profile, chosen)\n        out.append({\n            \"cost\": round(result.cost, 3),\n            \"numerals\": [sp.numeral for sp in used],\n            # so the page can bracket the runs when a phrase could not be\n            # written one way throughout\n            \"positions\": [position_of(v) for v in result.voicings],\n            # what a numeral *does* and what the chord *is*: two readings of\n            # the same sonority, and a student wants both\n            \"symbols\": [sp.symbol for sp in used],\n            \"substitutions\": [\n                {\"chord\": i, \"written\": w, \"used\": u}\n                for i, w, u in result.substitutions(specs)\n            ],\n            \"violations\": [\n                {\"rule\": v.rule_id, \"voices\": v.voices,\n                 \"chord\": v.chord_index, \"message\": v.message}\n                for v in errors_only(graded)\n            ],\n            \"exceptions\": [\n                {\"rule\": v.rule_id, \"voices\": v.voices, \"chord\": v.chord_index,\n                 \"message\": v.message, \"reason\": v.reason}\n                for v in explained_breaks(graded)\n            ],\n            \"chords\": [\n                {name: _note(v[name], key) for name in VOICE_NAMES}\n                for v in result.voicings\n            ],\n            \"opportunities\": [\n                {\"chord\": o.chord, \"voice\": o.voice, \"kind\": o.kind,\n                 \"slot\": o.slot,\n                 \"note\": _note(o.pitch, key) if o.pitch else None,\n                 \"refusedBy\": o.refused_by}\n                for o in offers\n            ],\n            \"events\": [\n                {\"beats\": e.beats, \"chord\": e.chord,\n                 \"decorating\": list(e.decorating), \"tied\": list(e.tied),\n                 \"voices\": {name: _note(e.voicing[name], key)\n                            for name in VOICE_NAMES}}\n                for e in events\n            ],\n            \"refused\": [\n                {\"chord\": o.chord, \"voice\": o.voice, \"kind\": o.kind,\n                 \"slot\": o.slot, \"refusedBy\": o.refused_by}\n                for o in refused\n            ],\n            # Every form, on every result, computed up front. Figurating a\n            # solved realization is arithmetic over a few hundred notes,\n            # where re-solving to answer a button press is the expensive\n            # thing. Sending them all is what makes the picker instant.\n            #\n            # A note is four numbers, not an object: which chord, which rung,\n            # when, how long. What pitch that is comes from the ladder, which\n            # every form shares because every form climbs the same one. Spelt\n            # out per note per form the payload ran past a megabyte on a long\n            # progression with alternates; this way it is a few tens of KB,\n            # and nothing about the figure moved into the page to get there.\n            \"prelude\": {\n                \"ladders\": [\n                    [_note(p, key) for p in ladder_for(v, sp, PRELUDE_RUNGS)]\n                    for v, sp in zip(result.voicings, used)\n                ],\n                \"forms\": {\n                    form.id: {\n                        \"meter\": f\"{form.meter[0]}/{form.meter[1]}\",\n                        \"beatsPerMeasure\": form.beats_per_measure,\n                        \"unit\": form.unit,\n                        \"notes\": [[n.chord, n.rung, n.start, n.beats]\n                                  for n in figurate(result.voicings, used, form)],\n                    }\n                    for form in PRELUDE_FORM_LIST\n                },\n            },\n        })\n\n    signature = key.signature()\n    sharps = sum(1 for alt in signature.values() if alt > 0)\n    flats = sum(1 for alt in signature.values() if alt < 0)\n\n    return {\n        \"ok\": True,\n        \"key\": str(key),\n        \"signature\": {\n            \"kind\": \"sharp\" if sharps else (\"flat\" if flats else None),\n            \"count\": sharps or flats,\n        },\n        \"meter\": f\"{DEFAULT_METER[0]}/{DEFAULT_METER[1]}\",\n        \"preludeForms\": [{\"id\": f.id, \"label\": f.label,\n                          \"meter\": f\"{f.meter[0]}/{f.meter[1]}\"}\n                         for f in PRELUDE_FORM_LIST],\n        \"profile\": profile.name,\n        \"numerals\": [s.numeral for s in specs],\n        \"sopranoFixed\": bool(melody),\n        \"spellings\": [[str(pc) for pc in s.pitch_classes] for s in specs],\n        \"results\": out,\n    }\n\n\nclass Handler(BaseHTTPRequestHandler):\n    def log_message(self, fmt, *args):\n        sys.stderr.write(\"  %s\\n\" % (fmt % args))\n\n    def _send(self, code: int, body: bytes, content_type: str):\n        self.send_response(code)\n        self.send_header(\"Content-Type\", content_type)\n        self.send_header(\"Content-Length\", str(len(body)))\n        self.send_header(\"Cache-Control\", \"no-store\")\n        self.end_headers()\n        self.wfile.write(body)\n\n    def _json(self, code: int, payload: dict):\n        self._send(code, json.dumps(payload).encode(\"utf-8\"), \"application/json\")\n\n    def do_GET(self):\n        if self.path in (\"/\", \"/index.html\"):\n            page = STATIC / \"index.html\"\n            if not page.exists():\n                self._send(500, b\"index.html is missing\", \"text/plain\")\n                return\n            self._send(200, page.read_bytes(), \"text/html; charset=utf-8\")\n            return\n        if self.path.startswith(\"/api/midi\"):\n            self._midi(urlparse(self.path).query)\n            return\n        if self.path == \"/api/profiles\":\n            names = sorted(p.stem for p in PROFILE_DIR.glob(\"*.json\"))\n            self._json(200, {\"ok\": True, \"profiles\": names, \"build\": _build_stamp(),\n                             \"version\": VERSION, \"released\": RELEASED})\n            return\n        self._send(404, b\"not found\", \"text/plain\")\n\n    def _midi(self, query: str):\n        params = parse_qs(query)\n        try:\n            data, stem = midi_for({name: values[0]\n                                   for name, values in params.items() if values})\n        except (RomanNumeralError, NoRealization, ValueError, FileNotFoundError) as exc:\n            self._json(200, {\"ok\": False, \"error\": str(exc)})\n            return\n\n        self.send_response(200)\n        self.send_header(\"Content-Type\", \"audio/midi\")\n        self.send_header(\"Content-Disposition\", f'attachment; filename=\"{stem}.mid\"')\n        self.send_header(\"Content-Length\", str(len(data)))\n        self.end_headers()\n        self.wfile.write(data)\n\n    def do_POST(self):\n        if self.path not in (\"/api/realize\", \"/api/candidates\", \"/api/transpose\"):\n            self._send(404, b\"not found\", \"text/plain\")\n            return\n        try:\n            length = int(self.headers.get(\"Content-Length\") or 0)\n            request = json.loads(self.rfile.read(length) or b\"{}\")\n        except (ValueError, json.JSONDecodeError):\n            self._json(400, {\"ok\": False, \"error\": \"the request body was not JSON\"})\n            return\n\n        if self.path in (\"/api/candidates\", \"/api/transpose\"):\n            work = (candidates_payload if self.path.endswith(\"candidates\")\n                    else transpose_payload)\n            try:\n                self._json(200, work(request))\n            except (RomanNumeralError, ValueError, FileNotFoundError) as exc:\n                self._json(200, {\"ok\": False, \"error\": str(exc)})\n            except Exception as exc:                  # pragma: no cover\n                # The same fallback /api/realize has. Without it these two\n                # answered a bad request by raising out of the handler:\n                # a logged traceback, a broken connection and no reply at\n                # all, where the third endpoint returns a message. A\n                # soprano that is null rather than a string was enough.\n                self._json(500, {\"ok\": False, \"error\": f\"unexpected: {exc}\"})\n            return\n\n        try:\n            payload = realize_payload(\n                key_text=request.get(\"key\", \"C major\"),\n                progression=request.get(\"progression\", \"\"),\n                profile_name=request.get(\"profile\", \"strict\"),\n                alternates=int(request.get(\"alternates\", 1)),\n                soprano_text=request.get(\"soprano\", \"\") or \"\",\n                figures=request.get(\"figures\") or [],\n                position=request.get(\"position\", \"any\"),\n            )\n        except (RomanNumeralError, NoRealization, ValueError, FileNotFoundError) as exc:\n            # These carry the explanation the engine worked out; pass it through\n            # verbatim rather than flattening it to \"invalid\".\n            self._json(200, {\"ok\": False, \"error\": str(exc)})\n            return\n        except Exception as exc:                      # pragma: no cover\n            self._json(500, {\"ok\": False, \"error\": f\"unexpected: {exc}\"})\n            return\n\n        self._json(200, payload)\n\n\ndef serve(host: str = \"127.0.0.1\", port: int = 8765) -> None:\n    server = ThreadingHTTPServer((host, port), Handler)\n    print(f\"  harmony on http://{host}:{port}\")\n    try:\n        server.serve_forever()\n    except KeyboardInterrupt:\n        print(\"\\n  stopped\")\n\n\nif __name__ == \"__main__\":\n    serve(port=int(sys.argv[1]) if len(sys.argv) > 1 else 8765)\n",
+"harmony/web/server.py": "\"\"\"A thin HTTP layer over the engine.\n\nStdlib only, to keep the package dependency-free. Swapping in Flask would\ntouch this file and nothing else.\n\nNo rule logic lives here. This module parses a request, calls the same\nfunctions the CLI calls, and serialises what comes back. Meter is 4/4 for a\nplain realization and never shown, because the engine stores it and the rules\nnever see it; a prelude form carries its own, since a waltz is in three.\n\"\"\"\n\nfrom __future__ import annotations\n\nimport json\nimport re\nimport sys\nfrom urllib.parse import parse_qs, urlparse\nfrom http.server import BaseHTTPRequestHandler, ThreadingHTTPServer\nfrom pathlib import Path\n\nfrom ..version import RELEASED, VERSION\nfrom ..core.checker import check, errors_only, explained_breaks\nfrom ..core.embellish import apply as place_figures\nfrom ..core.embellish import opportunities\nfrom ..core.key import Key\nfrom ..core.melody import (HOLE, candidates_for, parse_soprano, suggest,\n                           transpose, vocabulary_for, workable)\nfrom ..core.midi import encode as midi_encode\nfrom ..core.midi import to_bytes as midi_bytes\nfrom ..core.prelude import BY_ID as PRELUDE_FORMS\nfrom ..core.prelude import FORMS as PRELUDE_FORM_LIST\nfrom ..core.prelude import figurate, ladder_for\nfrom ..core.prelude import spans as prelude_spans\nfrom ..core.roman import RomanNumeralError, parse_progression\nfrom ..core.roman import parse as parse_roman\nfrom ..core.rules.registry import PROFILE_DIR, REGISTRY, Profile\nfrom ..core.rules.state import position_of\nfrom ..core.solver import NoRealization, solve\nfrom ..core.voice import VOICE_NAMES\n\nSTATIC = Path(__file__).resolve().parent / \"static\"\nCORE = Path(__file__).resolve().parents[1] / \"core\"\n\n\ndef _build_stamp() -> str:\n    \"\"\"Newest mtime across the engine, so a stale server shows its age.\"\"\"\n    import datetime\n    newest = max(p.stat().st_mtime for p in CORE.rglob(\"*.py\"))\n    return datetime.datetime.fromtimestamp(newest).strftime(\"%H:%M:%S\")\nDEFAULT_METER = (4, 4)\n\n\n# One ladder serves every form, so it is built as tall as the tallest needs.\nPRELUDE_RUNGS = max(form.rungs for form in PRELUDE_FORM_LIST)\n\n\ndef _explanation(rule_id: str) -> str:\n    rule = REGISTRY.get(rule_id)\n    return rule.explanation if rule else \"\"\n\n\ndef _meter_for(form_id: str | None) -> tuple[int, int]:\n    form = PRELUDE_FORMS.get(form_id or \"\")\n    return form.meter if form else DEFAULT_METER\n\n\ndef _note(pitch, key) -> dict:\n    \"\"\"A pitch in the shape the page draws from.\n\n    Only notes departing from the key signature get a written accidental;\n    the signature carries the rest.\n    \"\"\"\n    return {\"name\": str(pitch), \"midi\": pitch.midi, \"letter\": pitch.letter,\n            \"octave\": pitch.octave, \"alteration\": pitch.alteration,\n            \"accidental\": key.is_altered(pitch)}\n\n\ndef candidates_payload(request: dict) -> dict:\n    \"\"\"Which chords could carry each note of a melody.\n\n    A hole - a note the writer left for the engine - has no options to\n    offer and is passed straight through, so a partly pinned melody does\n    not break the chord chips underneath it.\n\n    Whatever is already written is offered too. The teaching vocabulary is\n    a starting list for an empty progression, not a fence around one that\n    exists: a writer who typed V+ and then held the soprano was shown no V+\n    to hold on to, and the chord silently became I. Under a D-sharp there\n    was nothing on offer at all.\n    \"\"\"\n    key = Key.parse(request.get(\"key\", \"C major\"))\n    profile = Profile.load(request.get(\"profile\", \"strict\"))\n    melody = parse_soprano(request.get(\"soprano\", \"\"))\n\n    vocabulary = list(vocabulary_for(key))\n    for token in (request.get(\"progression\") or \"\").split():\n        if token in vocabulary:\n            continue\n        try:\n            parse_roman(token, key)          # only what the key can spell\n        except (RomanNumeralError, ValueError):\n            continue\n        vocabulary.append(token)\n    # candidates_for, workable and suggest below all end up asking generate()\n    # the same (note index, chord) question - each only ever narrows what\n    # the one before it already searched - so one cache threaded through all\n    # three means each later call reuses that work instead of redoing it.\n    voicing_cache: dict = {}\n    found = [candidates_for(note, key, profile, vocabulary, index=i, cache=voicing_cache)\n             if note is not None else []\n             for i, note in enumerate(melody)]\n\n    # Then drop the ones that cannot be joined to their neighbours. Carrying\n    # the note is only half of what a chord has to do, and a button that\n    # errors when pressed is worse than no button - see workable().\n    usable = workable([[o[\"numeral\"] for o in options] for options in found],\n                      melody, key, profile, cache=voicing_cache)\n    found = [[o for o in options if o[\"numeral\"] in keep]\n             for options, keep in zip(found, usable)]\n\n    notes = [\n        {\"note\": str(note) if note is not None else HOLE,\n         \"free\": note is None,\n         \"options\": options}\n        for note, options in zip(melody, found)\n    ]\n    # One chord per note, chosen across the phrase rather than one note at a\n    # time - see suggest(). The page uses it wherever nothing is written.\n    return {\n        \"ok\": True,\n        \"suggested\": suggest([[o[\"numeral\"] for o in n[\"options\"]] for n in notes],\n                             key, melody, profile, cache=voicing_cache),\n        \"notes\": notes,\n    }\n\n\ndef transpose_payload(request: dict) -> dict:\n    \"\"\"The same melody on the same scale degrees of another key.\n\n    Kept in the engine rather than done in the page. The page would have to\n    grow its own idea of what a scale degree is and how a key spells one,\n    and that copy would drift from this one - which is the reason the solver\n    and the checker share their rules rather than each having a set.\n    \"\"\"\n    from_key = Key.parse(request.get(\"from\", \"C major\"))\n    to_key = Key.parse(request.get(\"to\", \"C major\"))\n    profile = Profile.load(request.get(\"profile\", \"strict\"))\n    melody = parse_soprano(request.get(\"soprano\", \"\"))\n    low, high = profile.ranges[\"soprano\"]\n    moved = transpose(melody, from_key, to_key, low, high)\n    return {\"ok\": True,\n            \"soprano\": \" \".join(HOLE if p is None else str(p) for p in moved)}\n\n\ndef parse_figures(text: str) -> list[str]:\n    \"\"\"Read the page's list of chosen figures from a URL.\n\n    Each one is a slot as Opportunity.slot writes it - chord, voice, kind\n    and note joined by colons - and they are separated by commas. Nothing\n    is validated here; apply() rebuilds the candidates and refuses whatever\n    no longer fits, which is what a stale or hand-edited URL deserves.\n    \"\"\"\n    return [token.strip() for token in text.split(\",\") if token.strip()]\n\n\ndef midi_for(params: dict) -> tuple[bytes, str]:\n    \"\"\"The bytes of an exported file and the name to save it under.\n\n    The export runs the same placement the page does, so what downloads is\n    what was on screen rather than the undecorated chords underneath it.\n    \"\"\"\n    key = Key.parse(params.get(\"key\") or \"C major\")\n    profile = Profile.load(params.get(\"profile\") or \"strict\")\n    progression = params.get(\"progression\") or \"\"\n    specs = parse_progression(progression, key)\n    index = max(0, int(params.get(\"alt\") or 0))\n    soprano_text = (params.get(\"soprano\") or \"\").strip()\n    melody = parse_soprano(soprano_text) if soprano_text else None\n\n    results = solve(specs, key, profile, k=index + 1, soprano=melody)\n    result = results[min(index, len(results) - 1)]\n    used = result.specs or specs\n    tempo = float(params.get(\"tempo\") or 84)\n\n    # A prelude replaces the chords rather than decorating them, so it takes\n    # the whole export: the figure runs off the block voicings, and the\n    # embellishments chosen for the block view have nothing to attach to.\n    form = PRELUDE_FORMS.get((params.get(\"form\") or \"\").strip())\n    if form is not None:\n        data = midi_encode(prelude_spans(figurate(result.voicings, used, form)),\n                           tempo_bpm=tempo, meter=form.meter)\n    else:\n        events, _ = place_figures(result.voicings, used, key, profile,\n                                  parse_figures(params.get(\"figures\") or \"\"))\n        data = midi_bytes(events, tempo_bpm=tempo, meter=DEFAULT_METER)\n\n    name = f\"{key} {progression}\" + (f\" {form.id}\" if form else \"\")\n    stem = re.sub(r\"[^A-Za-z0-9]+\", \"-\", name).strip(\"-\").lower() or \"harmony\"\n    return data, stem\n\n\ndef realize_payload(key_text: str, progression: str, profile_name: str,\n                    alternates: int, soprano_text: str = \"\",\n                    figures=None, position: str = \"any\") -> dict:\n    key = Key.parse(key_text)\n    profile = Profile.load(profile_name)\n    # Asked for per request rather than baked into the profile, because it is\n    # a choice about this phrase and not a rule about music.\n    if position in (\"open\", \"closed\"):\n        profile.params[\"position\"] = position\n    specs = parse_progression(progression, key)\n    melody = parse_soprano(soprano_text) if soprano_text.strip() else None\n    width = max(1, min(alternates, 5))\n    results = solve(specs, key, profile, k=width, soprano=melody)\n    chosen = [str(slot) for slot in (figures or [])]\n\n    out = []\n    for result in results:\n        used = result.specs or specs\n        graded = check(result.voicings, used, key, profile)\n        # judged against what is already chosen, so an offer the page\n        # draws is an offer that will take\n        offers = opportunities(result.voicings, used, key, profile,\n                               chosen=chosen)\n        events, refused = place_figures(result.voicings, used, key, profile, chosen)\n        out.append({\n            \"cost\": round(result.cost, 3),\n            \"numerals\": [sp.numeral for sp in used],\n            # so the page can bracket the runs when a phrase could not be\n            # written one way throughout\n            \"positions\": [position_of(v) for v in result.voicings],\n            # what a numeral *does* and what the chord *is*: two readings of\n            # the same sonority, and a student wants both\n            \"symbols\": [sp.symbol for sp in used],\n            \"substitutions\": [\n                {\"chord\": i, \"written\": w, \"used\": u}\n                for i, w, u in result.substitutions(specs)\n            ],\n            # Each carries the rule's own explanation as well as what went\n            # wrong. The command line always printed it; the page never had\n            # it, so a broken rule could say that it broke but not what the\n            # rule is there to protect.\n            \"violations\": [\n                {\"rule\": v.rule_id, \"voices\": v.voices,\n                 \"chord\": v.chord_index, \"message\": v.message,\n                 \"explanation\": _explanation(v.rule_id)}\n                for v in errors_only(graded)\n            ],\n            \"exceptions\": [\n                {\"rule\": v.rule_id, \"voices\": v.voices, \"chord\": v.chord_index,\n                 \"message\": v.message, \"reason\": v.reason,\n                 \"explanation\": _explanation(v.rule_id)}\n                for v in explained_breaks(graded)\n            ],\n            \"chords\": [\n                {name: _note(v[name], key) for name in VOICE_NAMES}\n                for v in result.voicings\n            ],\n            \"opportunities\": [\n                {\"chord\": o.chord, \"voice\": o.voice, \"kind\": o.kind,\n                 \"slot\": o.slot,\n                 \"note\": _note(o.pitch, key) if o.pitch else None,\n                 \"refusedBy\": o.refused_by}\n                for o in offers\n            ],\n            \"events\": [\n                {\"beats\": e.beats, \"chord\": e.chord,\n                 \"decorating\": list(e.decorating), \"tied\": list(e.tied),\n                 \"voices\": {name: _note(e.voicing[name], key)\n                            for name in VOICE_NAMES}}\n                for e in events\n            ],\n            \"refused\": [\n                {\"chord\": o.chord, \"voice\": o.voice, \"kind\": o.kind,\n                 \"slot\": o.slot, \"refusedBy\": o.refused_by}\n                for o in refused\n            ],\n            # Every form, on every result, computed up front. Figurating a\n            # solved realization is arithmetic over a few hundred notes,\n            # where re-solving to answer a button press is the expensive\n            # thing. Sending them all is what makes the picker instant.\n            #\n            # A note is four numbers, not an object: which chord, which rung,\n            # when, how long. What pitch that is comes from the ladder, which\n            # every form shares because every form climbs the same one. Spelt\n            # out per note per form the payload ran past a megabyte on a long\n            # progression with alternates; this way it is a few tens of KB,\n            # and nothing about the figure moved into the page to get there.\n            \"prelude\": {\n                \"ladders\": [\n                    [_note(p, key) for p in ladder_for(v, sp, PRELUDE_RUNGS)]\n                    for v, sp in zip(result.voicings, used)\n                ],\n                \"forms\": {\n                    form.id: {\n                        \"meter\": f\"{form.meter[0]}/{form.meter[1]}\",\n                        \"beatsPerMeasure\": form.beats_per_measure,\n                        \"unit\": form.unit,\n                        \"notes\": [[n.chord, n.rung, n.start, n.beats]\n                                  for n in figurate(result.voicings, used, form)],\n                    }\n                    for form in PRELUDE_FORM_LIST\n                },\n            },\n        })\n\n    signature = key.signature()\n    sharps = sum(1 for alt in signature.values() if alt > 0)\n    flats = sum(1 for alt in signature.values() if alt < 0)\n\n    return {\n        \"ok\": True,\n        \"key\": str(key),\n        \"signature\": {\n            \"kind\": \"sharp\" if sharps else (\"flat\" if flats else None),\n            \"count\": sharps or flats,\n        },\n        \"meter\": f\"{DEFAULT_METER[0]}/{DEFAULT_METER[1]}\",\n        \"preludeForms\": [{\"id\": f.id, \"label\": f.label,\n                          \"meter\": f\"{f.meter[0]}/{f.meter[1]}\"}\n                         for f in PRELUDE_FORM_LIST],\n        \"profile\": profile.name,\n        \"numerals\": [s.numeral for s in specs],\n        \"sopranoFixed\": bool(melody),\n        \"spellings\": [[str(pc) for pc in s.pitch_classes] for s in specs],\n        \"results\": out,\n    }\n\n\nclass Handler(BaseHTTPRequestHandler):\n    def log_message(self, fmt, *args):\n        sys.stderr.write(\"  %s\\n\" % (fmt % args))\n\n    def _send(self, code: int, body: bytes, content_type: str):\n        self.send_response(code)\n        self.send_header(\"Content-Type\", content_type)\n        self.send_header(\"Content-Length\", str(len(body)))\n        self.send_header(\"Cache-Control\", \"no-store\")\n        self.end_headers()\n        self.wfile.write(body)\n\n    def _json(self, code: int, payload: dict):\n        self._send(code, json.dumps(payload).encode(\"utf-8\"), \"application/json\")\n\n    def do_GET(self):\n        if self.path in (\"/\", \"/index.html\"):\n            page = STATIC / \"index.html\"\n            if not page.exists():\n                self._send(500, b\"index.html is missing\", \"text/plain\")\n                return\n            self._send(200, page.read_bytes(), \"text/html; charset=utf-8\")\n            return\n        if self.path.startswith(\"/api/midi\"):\n            self._midi(urlparse(self.path).query)\n            return\n        if self.path == \"/api/profiles\":\n            names = sorted(p.stem for p in PROFILE_DIR.glob(\"*.json\"))\n            self._json(200, {\"ok\": True, \"profiles\": names, \"build\": _build_stamp(),\n                             \"version\": VERSION, \"released\": RELEASED})\n            return\n        self._send(404, b\"not found\", \"text/plain\")\n\n    def _midi(self, query: str):\n        params = parse_qs(query)\n        try:\n            data, stem = midi_for({name: values[0]\n                                   for name, values in params.items() if values})\n        except (RomanNumeralError, NoRealization, ValueError, FileNotFoundError) as exc:\n            self._json(200, {\"ok\": False, \"error\": str(exc)})\n            return\n\n        self.send_response(200)\n        self.send_header(\"Content-Type\", \"audio/midi\")\n        self.send_header(\"Content-Disposition\", f'attachment; filename=\"{stem}.mid\"')\n        self.send_header(\"Content-Length\", str(len(data)))\n        self.end_headers()\n        self.wfile.write(data)\n\n    def do_POST(self):\n        if self.path not in (\"/api/realize\", \"/api/candidates\", \"/api/transpose\"):\n            self._send(404, b\"not found\", \"text/plain\")\n            return\n        try:\n            length = int(self.headers.get(\"Content-Length\") or 0)\n            request = json.loads(self.rfile.read(length) or b\"{}\")\n        except (ValueError, json.JSONDecodeError):\n            self._json(400, {\"ok\": False, \"error\": \"the request body was not JSON\"})\n            return\n\n        if self.path in (\"/api/candidates\", \"/api/transpose\"):\n            work = (candidates_payload if self.path.endswith(\"candidates\")\n                    else transpose_payload)\n            try:\n                self._json(200, work(request))\n            except (RomanNumeralError, ValueError, FileNotFoundError) as exc:\n                self._json(200, {\"ok\": False, \"error\": str(exc)})\n            except Exception as exc:                  # pragma: no cover\n                # The same fallback /api/realize has. Without it these two\n                # answered a bad request by raising out of the handler:\n                # a logged traceback, a broken connection and no reply at\n                # all, where the third endpoint returns a message. A\n                # soprano that is null rather than a string was enough.\n                self._json(500, {\"ok\": False, \"error\": f\"unexpected: {exc}\"})\n            return\n\n        try:\n            payload = realize_payload(\n                key_text=request.get(\"key\", \"C major\"),\n                progression=request.get(\"progression\", \"\"),\n                profile_name=request.get(\"profile\", \"strict\"),\n                alternates=int(request.get(\"alternates\", 1)),\n                soprano_text=request.get(\"soprano\", \"\") or \"\",\n                figures=request.get(\"figures\") or [],\n                position=request.get(\"position\", \"any\"),\n            )\n        except (RomanNumeralError, NoRealization, ValueError, FileNotFoundError) as exc:\n            # These carry the explanation the engine worked out; pass it through\n            # verbatim rather than flattening it to \"invalid\".\n            self._json(200, {\"ok\": False, \"error\": str(exc)})\n            return\n        except Exception as exc:                      # pragma: no cover\n            self._json(500, {\"ok\": False, \"error\": f\"unexpected: {exc}\"})\n            return\n\n        self._json(200, payload)\n\n\ndef serve(host: str = \"127.0.0.1\", port: int = 8765) -> None:\n    server = ThreadingHTTPServer((host, port), Handler)\n    print(f\"  harmony on http://{host}:{port}\")\n    try:\n        server.serve_forever()\n    except KeyboardInterrupt:\n        print(\"\\n  stopped\")\n\n\nif __name__ == \"__main__\":\n    serve(port=int(sys.argv[1]) if len(sys.argv) > 1 else 8765)\n",
 "harmony/profiles/strict.json": "{\n  \"name\": \"strict\",\n  \"description\": \"A perfect fourth, fifth or octave reached by similar motion is a fault in every pair, at every compound and however the voices approach it - no leap is required and no excuse is offered. The leading tone resolves in the outer voices and may fall only to the fifth in an inner one; the German sixth excuses the unequal fifth it forces.\",\n  \"ranges\": {\n    \"soprano\": [\n      \"C4\",\n      \"G5\"\n    ],\n    \"alto\": [\n      \"G3\",\n      \"D5\"\n    ],\n    \"tenor\": [\n      \"C3\",\n      \"G4\"\n    ],\n    \"bass\": [\n      \"E2\",\n      \"C4\"\n    ]\n  },\n  \"params\": {\n    \"hidden_perfect_pairs\": \"all\",\n    \"german_sixth_fifths\": \"forbid\",\n    \"unequal_fifths\": \"all\",\n    \"consecutive_perfects_pairs\": \"all\",\n    \"hidden_perfect_leap\": \"none\",\n    \"hidden_perfect_intervals\": [\n      4,\n      5,\n      8\n    ],\n    \"parallel_intervals\": [\n      1,\n      4,\n      5,\n      8\n    ],\n    \"motion_voices\": [\n      \"soprano\"\n    ],\n    \"parallel_fourths_with_bass_only\": false,\n    \"leading_tone_outer_voices\": [\n      \"soprano\",\n      \"bass\"\n    ],\n    \"hidden_fourth_pairs\": \"all\",\n    \"unequal_fourths\": \"all\",\n    \"applied_leading_tone_voices\": [\n      \"soprano\",\n      \"bass\"\n    ],\n    \"hidden_fourth_leap\": \"none\",\n    \"hidden_outer_leap\": \"none\",\n    \"similar_motion_limit\": 3,\n    \"position\": \"any\"\n  },\n  \"rules\": {\n    \"voice_range\": {\n      \"enabled\": true,\n      \"severity\": \"error\",\n      \"cost\": \"inf\"\n    },\n    \"spacing\": {\n      \"enabled\": true,\n      \"severity\": \"error\",\n      \"cost\": 500.0\n    },\n    \"voice_crossing\": {\n      \"enabled\": true,\n      \"severity\": \"error\",\n      \"cost\": \"inf\"\n    },\n    \"doubled_tendency_tone\": {\n      \"enabled\": true,\n      \"severity\": \"warning\",\n      \"cost\": 14.0\n    },\n    \"incomplete_chord\": {\n      \"enabled\": true,\n      \"severity\": \"warning\",\n      \"cost\": 7.0\n    },\n    \"parallel_perfect\": {\n      \"enabled\": true,\n      \"severity\": \"error\",\n      \"cost\": 9000.0,\n      \"waived_cost\": 40.0\n    },\n    \"parallel_altered\": {\n      \"enabled\": true,\n      \"severity\": \"error\",\n      \"cost\": 2500.0\n    },\n    \"voice_overlap\": {\n      \"enabled\": true,\n      \"severity\": \"error\",\n      \"cost\": \"inf\"\n    },\n    \"leading_tone_resolution\": {\n      \"enabled\": true,\n      \"severity\": \"error\",\n      \"cost\": 1500.0,\n      \"waived_cost\": 25.0\n    },\n    \"seventh_resolution\": {\n      \"enabled\": true,\n      \"severity\": \"error\",\n      \"cost\": 1200.0\n    },\n    \"melodic_augmented\": {\n      \"enabled\": true,\n      \"severity\": \"error\",\n      \"cost\": 800.0\n    },\n    \"large_leap\": {\n      \"enabled\": true,\n      \"severity\": \"style\",\n      \"cost\": 1.5\n    },\n    \"leap_recovery\": {\n      \"enabled\": true,\n      \"severity\": \"style\",\n      \"cost\": 2.0\n    },\n    \"outer_voice_similar_motion\": {\n      \"enabled\": true,\n      \"severity\": \"style\",\n      \"cost\": 0.6\n    },\n    \"similar_motion\": {\n      \"enabled\": true,\n      \"severity\": \"style\",\n      \"cost\": 6.0\n    },\n    \"hidden_perfect\": {\n      \"enabled\": true,\n      \"severity\": \"error\",\n      \"cost\": 7000.0,\n      \"waived_cost\": 3000.0\n    },\n    \"augmented_sixth_resolution\": {\n      \"enabled\": true,\n      \"severity\": \"error\",\n      \"cost\": 2000.0\n    },\n    \"unequal_fifths\": {\n      \"enabled\": true,\n      \"severity\": \"warning\",\n      \"cost\": 5000.0,\n      \"waived_cost\": 2000.0\n    },\n    \"unequal_fourths\": {\n      \"enabled\": true,\n      \"severity\": \"error\",\n      \"cost\": 5000.0,\n      \"waived_cost\": 2000.0\n    },\n    \"missing_essential_tone\": {\n      \"enabled\": true,\n      \"severity\": \"error\",\n      \"cost\": \"inf\"\n    },\n    \"voice_unison\": {\n      \"enabled\": true,\n      \"severity\": \"warning\",\n      \"cost\": 8.0\n    },\n    \"consecutive_perfects\": {\n      \"enabled\": true,\n      \"severity\": \"error\",\n      \"cost\": 8000.0\n    },\n    \"doubled_leading_tone\": {\n      \"enabled\": true,\n      \"severity\": \"warning\",\n      \"cost\": 18.0\n    },\n    \"doubling_preference\": {\n      \"enabled\": true,\n      \"severity\": \"style\",\n      \"cost\": 1.5\n    },\n    \"missing_seventh\": {\n      \"enabled\": true,\n      \"severity\": \"error\",\n      \"cost\": \"inf\"\n    },\n    \"prefers_oblique_motion\": {\n      \"enabled\": true,\n      \"severity\": \"style\",\n      \"cost\": 1.0\n    },\n    \"voicing_position\": {\n      \"enabled\": true,\n      \"severity\": \"style\",\n      \"cost\": 25.0\n    }\n  },\n  \"notes\": \"Motion rules are priced, not forbidden: every chord can follow every chord, and what it cost to get there is reported. The prices are far above any ordinary preference, so a clean answer always wins where one exists. Ranges and chord identity stay absolute.\"\n}\n"
 };
 
 (function () {
   "use strict";
 
-  var banner = null, bootBar = null, bootHead = null, bootTrail = null, bootLabel = null;
+  var banner = null, bootBar = null, bootSweep = null, bootLabel = null;
   /* The same playhead loader the page uses once it is running, so the
      first thing anyone sees is already the app's own furniture. Its styles
      come from the page, which is in this document by the time it paints. */
@@ -773,11 +826,12 @@ window.HARMONY_SOURCES = {
     [12, 22, 32, 42, 52].map(function (y) {
       return '<line class="ls-line" x1="6" y1="' + y + '" x2="234" y2="' + y + '"/>';
     }).join("") +
-    '<line class="ls-bar ls-bar-1" x1="63" y1="12" x2="63" y2="52"/>' +
-    '<line class="ls-bar ls-bar-2" x1="120" y1="12" x2="120" y2="52"/>' +
-    '<line class="ls-bar ls-bar-3" x1="177" y1="12" x2="177" y2="52"/>' +
-    '<rect class="ls-trail" x="6" y="12" width="0" height="40"/>' +
-    '<g class="ls-head"><rect x="-1.5" y="4" width="3" height="56" rx="1.5"/></g></svg>';
+    '<line class="ls-bar" x1="63" y1="12" x2="63" y2="52"/>' +
+    '<line class="ls-bar" x1="120" y1="12" x2="120" y2="52"/>' +
+    '<line class="ls-bar" x1="177" y1="12" x2="177" y2="52"/></svg>' +
+    '<div class="ls-track"><div class="ls-tick ls-tick-1"></div>' +
+    '<div class="ls-tick ls-tick-2"></div><div class="ls-tick ls-tick-3"></div>' +
+    '<div class="ls-sweep"><div class="ls-trail"></div><div class="ls-head"></div></div></div>';
 
   function say(text, fraction) {
     if (!banner) {
@@ -788,8 +842,7 @@ window.HARMONY_SOURCES = {
       bootBar = document.createElement("div");
       bootBar.className = "loader";
       bootBar.innerHTML = LOADER;
-      bootHead = bootBar.querySelector(".ls-head");
-      bootTrail = bootBar.querySelector(".ls-trail");
+      bootSweep = bootBar.querySelector(".ls-sweep");
       banner.appendChild(bootLabel);
       banner.appendChild(bootBar);
       document.addEventListener("DOMContentLoaded", function () {
@@ -800,14 +853,12 @@ window.HARMONY_SOURCES = {
     banner.style.display = text ? "" : "none";
     if (fraction === null || fraction === undefined) {
       // clear the parked position, or the loop starts from wherever it was
-      bootHead.style.transform = "";
-      bootTrail.setAttribute("width", 0);
+      bootSweep.style.transform = "";
       bootBar.classList.add("sweeping");
     } else {
       bootBar.classList.remove("sweeping");
-      var x = 6 + Math.max(0, Math.min(1, fraction)) * 228;
-      bootHead.style.transform = "translateX(" + x + "px)";
-      bootTrail.setAttribute("width", x - 6);
+      var f = Math.max(0, Math.min(1, fraction));
+      bootSweep.style.transform = "translateX(" + ((f - 1) * 100) + "%)";
     }
   }
   say("starting the engine\u2026", 0);
@@ -1769,7 +1820,7 @@ window.HARMONY_SOURCES = {
      conditional in every line of it. */
 
   var BEAT_W = 46;         // the least a beat may be worth in pixels
-  var COLUMN_W = 22;       // the least room one struck column needs;
+  var COLUMN_W = 30;       // the least room one struck column needs;
                            // a dotted eighth with its flag needs this much
   var SYS_GAP = 40;        // air between one system and the next
   var METER_W = 34;        // reserved on every system, printed on the first
@@ -2026,8 +2077,11 @@ window.HARMONY_SOURCES = {
     for (var f = 0; f < count; f++) {
       var fl = inSpaces(sx, tipY + (up ? 1 : -1) * f * 0.62 * SPACE, "flag");
       var k = up ? 1 : -1;
-      fl.appendChild(el("path", { d: "M0 0 C0.05 " + (0.55 * k) + " 0.95 " + (0.85 * k) + " 0.72 " +
-        (1.9 * k) + " C0.72 " + (1.25 * k) + " 0.28 " + (0.98 * k) + " 0 " + (0.85 * k) + " Z" }));
+      /* A flag leaves the stem thick and sweeps out to a thin tail, down
+         from an up stem and up from a down one. Its root is under half a
+         space: any fatter and it reads as part of the notehead. */
+      fl.appendChild(el("path", { d: "M0 0 C0.12 " + (0.62 * k) + " 1.02 " + (0.98 * k) + " 0.8 " +
+        (2.3 * k) + " C0.76 " + (1.72 * k) + " 0.42 " + (1.12 * k) + " 0 " + (0.42 * k) + " Z" }));
       g.appendChild(fl);
     }
   }
@@ -2113,15 +2167,28 @@ window.HARMONY_SOURCES = {
                                 : (stack.length > 1 ? i > 0 : d < MIDDLE_C);
 
         // silence in this voice from when its stack began to when it enters
-        if (n.start > first + 1e-6) {
+        /* A rest and the note that ends it share one step of the grid, and a
+           sixteenth is not wide enough to hold both. Drawn on the grid they
+           run together into a single unreadable mark, so the rest leans left
+           and the note leans right - the uneven spacing an engraver gives
+           them. */
+        var restsFirst = n.start > first + 1e-6;
+        if (restsFirst) {
           spell(first, n.start - first, beatLen).forEach(function (p) {
-            rest(g, p.value, xAt(p.t), yOf(d) + (up ? -1 : 1) * SPACE);
+            /* On its beat the other voices are already sounding: the note
+               below it in the stack, and the running line's own rest above.
+               Stacked vertically it hit one or the other, so it steps right,
+               past the lower voice's notehead, at its own note's height. The
+               wide bars leave room for it before the note it waits for. */
+            // clear of the lower note's head and its ledger line, which reaches 13px out
+            rest(g, p.value, xAt(p.t) + 28, yOf(d));
           });
         }
 
         var pieces = spell(n.start, n.beats, beatLen);
         var drawn = pieces.map(function (p) {
           var x = xAt(p.t);
+          if (restsFirst && Math.abs(p.t - n.start) < 1e-6) x += HEAD_RX * 2 + 12;
           // a head that would touch a running note at the same moment steps right
           if (runningNear(p.t, d)) x += HEAD_RX * 2 + 2;
           var shape = p.value[1];
@@ -2133,10 +2200,12 @@ window.HARMONY_SOURCES = {
             if (FLAGS[shape]) flags(g, FLAGS[shape], sx, tip, up);
           }
           dots(g, p.value[2], x, d);
-          return { x: x, y: y };
+          return { x: x, y: y, dots: p.value[2] };
         });
         for (var k = 0; k + 1 < drawn.length; k++) {
-          tie(g, drawn[k].x + HEAD_RX, drawn[k + 1].x - HEAD_RX, drawn[k].y, up);
+          // a dotted note's tie leaves from beyond its dot, or the dot reads as the tie's end
+          var from = drawn[k].x + HEAD_RX + (drawn[k].dots ? 6 + 7 * drawn[k].dots : 0);
+          tie(g, from, drawn[k + 1].x - HEAD_RX, drawn[k].y, up);
         }
       });
     });
@@ -2641,22 +2710,16 @@ window.HARMONY_SOURCES = {
      For that stretch the bar sweeps instead of claiming a percentage. */
   function setProgress(fraction, label) {
     var box = document.getElementById("busyBar");
-    var head = document.getElementById("busyFill");
-    var trail = document.getElementById("busyTrail");
+    var sweep = document.getElementById("busyFill");
     if (fraction === null || fraction === undefined) {
-      /* The inline position has to go, not just be overruled. Whatever the
-         playhead was last parked at would otherwise sit on the element when
-         the loop starts - the same trap that once pinned the old sweeping
-         bar at zero width and made it look broken instead of busy. */
-      head.style.transform = "";
-      trail.setAttribute("width", 0);
+      /* The inline position has to go, not just be overruled, or the loop
+         would start from wherever the playhead was last parked. */
+      sweep.style.transform = "";
       box.classList.add("sweeping");
     } else {
       box.classList.remove("sweeping");
       var clamped = Math.max(0, Math.min(1, fraction));
-      var x = 6 + clamped * 228;
-      head.style.transform = "translateX(" + x + "px)";
-      trail.setAttribute("width", x - 6);
+      sweep.style.transform = "translateX(" + ((clamped - 1) * 100) + "%)";
     }
     if (label) document.getElementById("busyLabel").textContent = label;
   }
@@ -2719,11 +2782,11 @@ window.HARMONY_SOURCES = {
        second freeze immediately after the first, which is why it waits for
        a frame and holds the busy state rather than doing it in silence. */
     setBusy(true, "building the file");
+    setProgress(null, "building the file");
     return painted()
       .then(function () {
-        setProgress(null, "building the file");
         return backend.midiUrl({
-          key: document.getElementById("key").value,
+          key: currentKey(),
           progression: document.getElementById("prog").value,
           profile: PROFILE,
           position: document.getElementById("position").value,
@@ -2744,44 +2807,66 @@ window.HARMONY_SOURCES = {
       });
   }
 
+  /* What the chosen alternate broke, and why - under the cost chips, so the
+     number and what it is made of sit together.
+
+     Two kinds, and they are told apart because the explanation a reader
+     needs is different. A rule broken with a reason was weighed and
+     allowed, so it says why it was allowed here. A plain broken rule was
+     not, so it says what the rule is there to protect - the explanation
+     the engine keeps for every rule. Each says which chord and which
+     voices, because "the leading tone is doubled" is no use until you can
+     find it on the staff. */
   function renderExceptions(payload) {
     var box = document.getElementById("exceptions");
     box.innerHTML = "";
     if (!payload || !payload.ok) return;
-    var errors = payload.results[currentIndex].violations || [];
-    if (errors.length) {
-      var errHeading = document.createElement("div");
-      errHeading.innerHTML = "<b class=\"exc-err-heading\">" + errors.length +
-        " rule" + (errors.length > 1 ? "s" : "") + " broken</b>";
-      box.appendChild(errHeading);
-      errors.forEach(function (item) {
-        var line = document.createElement("div");
-        line.className = "exc-what exc-err";
-        line.textContent = "chord " + (item.chord + 1) + " · " + item.message;
-        box.appendChild(line);
-      });
+    var result = payload.results[currentIndex];
+    var numerals = result.numerals || payload.numerals || [];
+    var errors = result.violations || [];
+    var waived = result.exceptions || [];
+
+    function el(tag, cls, text) {
+      var node = document.createElement(tag);
+      if (cls) node.className = cls;
+      if (text !== undefined) node.textContent = text;
+      return node;
     }
-    var waived = payload.results[currentIndex].exceptions || [];
-    if (!waived.length) return;
-    var heading = document.createElement("div");
-    // Not all of these were chosen: a waived rule was broken on purpose,
-    // while a priced warning was broken because every alternative was
-    // worse. What they share is that the engine knew and can say why.
-    heading.innerHTML = "<b>" + waived.length + " rule" +
-      (waived.length > 1 ? "s" : "") + " broken with a reason</b>";
-    box.appendChild(heading);
-    waived.forEach(function (item) {
-      var line = document.createElement("div");
-      line.className = "exc-what";
-      line.textContent = "chord " + (item.chord + 1) + " · " + item.message;
-      box.appendChild(line);
-      if (item.reason) {
-        var why = document.createElement("div");
-        why.className = "exc-why";
-        why.textContent = item.reason;
-        box.appendChild(why);
-      }
-    });
+
+    if (!errors.length && !waived.length) {
+      box.appendChild(el("span", "rp-tag", "No violations"));
+      return;
+    }
+
+    function card(items, kind) {
+      var wrap = el("div", "rp-card" + (kind === "err" ? " rp-err-card" : ""));
+      var count = items.length + " rule" + (items.length > 1 ? "s" : "") + " broken";
+      wrap.appendChild(el("span", "rp-tag" + (kind === "err" ? " rp-err" : ""),
+                          kind === "err" ? count : count + " with a reason"));
+      items.forEach(function (item) {
+        var row = el("div", "rp-item");
+        var where = el("div", "rp-where",
+          "chord " + (item.chord + 1) + (numerals[item.chord] ? " \u00b7 " + numerals[item.chord] : ""));
+        if (item.voices && item.voices.length) {
+          where.appendChild(el("span", "rp-voices", item.voices.join(", ")));
+        }
+        row.appendChild(where);
+        row.appendChild(el("div", "rp-msg", item.message));
+        var because = kind === "err" ? item.explanation : (item.reason || item.explanation);
+        if (because) {
+          var why = el("div", "rp-why");
+          why.appendChild(el("b", "", kind === "err" || !item.reason
+                                      ? "Why it's a rule: " : "Why it's allowed here: "));
+          why.appendChild(document.createTextNode(because));
+          row.appendChild(why);
+        }
+        wrap.appendChild(row);
+      });
+      box.appendChild(wrap);
+    }
+
+    if (errors.length) card(errors, "err");
+    if (waived.length) card(waived, "why");
   }
 
   function renderAlternates(payload) {
@@ -2908,12 +2993,12 @@ window.HARMONY_SOURCES = {
     var box = document.getElementById("options");
     if (!melody) { box.innerHTML = ""; choices = []; return Promise.resolve(); }
 
-    setBusy(true, "reading the melody");
+    setBusy(true, "finding chords");
+    setProgress(null, "finding chords");
     return painted()
       .then(function () {
-        setProgress(null, "finding chords");
         return backend.candidates({
-          key: document.getElementById("key").value,
+          key: currentKey(),
           soprano: melody,
           profile: PROFILE,
           /* so a chord already written is among the ones offered, even when
@@ -2963,7 +3048,7 @@ window.HARMONY_SOURCES = {
         }).map(function (entry) { return entry.note; });
         renderOptions(payload);
         if (orphans.length) {
-          setStatus("nothing in " + document.getElementById("key").value +
+          setStatus("nothing in " + currentKey() +
                     " can carry " + orphans.join(", ") +
                     " - change the note, or the key", "err");
           return false;
@@ -3020,14 +3105,17 @@ window.HARMONY_SOURCES = {
       setStatus("write a progression, or pick a feeling or a melody", "ok");
       return Promise.resolve();
     }
-    setBusy(true, "reading the progression");
+    /* The loop is started before painted(), so the frame it waits for is
+       the one that starts the animation. Started inside the .then, it went
+       straight into a solve that holds the thread, and was never drawn. */
+    setBusy(true, "solving");
+    setProgress(null, "solving");
     setStatus("working…");
 
     return painted()
       .then(function () {
-        setProgress(null, "solving");
         return backend.realize({
-          key: document.getElementById("key").value,
+          key: currentKey(),
           progression: document.getElementById("prog").value,
           profile: PROFILE,
           soprano: melodyText(),
@@ -3043,6 +3131,7 @@ window.HARMONY_SOURCES = {
           current = null;
           render(null, 0);
           renderAlternates(null);
+          renderExceptions(null);
           document.getElementById("play").disabled = true;
           stopPlayback();
           ["prelude", "keep", "figuresOn", "intervals"].forEach(function (id) {
@@ -3083,7 +3172,7 @@ window.HARMONY_SOURCES = {
         var swaps = payload.results[currentIndex].substitutions || [];
         if (swaps.length) {
           var note = document.createElement("div");
-          note.style.color = "var(--cyan-dim)";
+          note.className = "rp-note";
           note.textContent = "as written it had no answer; re-voiced " +
             swaps.map(function (x) {
               return x.written + " as " + x.used + " (chord " + (x.chord + 1) + ")";
@@ -3147,24 +3236,72 @@ window.HARMONY_SOURCES = {
     tonicSelect.value = list.indexOf(want) >= 0 ? want : list[0];
   }
 
+  /* A tonic spelled the way the given mode's list spells it: minor in lower
+     case (a, f#, bb), major capitalised on the letter alone (A, F#, Bb).
+     Upper-casing the whole name used to turn bb into BB, which neither list
+     holds, so B-flat minor switched to major landed on C. */
+  function spellTonic(t, mode) {
+    t = String(t || "");
+    return mode === "minor" ? t.toLowerCase()
+                            : t.charAt(0).toUpperCase() + t.slice(1).toLowerCase();
+  }
+
+  /* Make every key control agree with what the two visible ones show.
+
+     A refresh is what needs this. The browser puts back the last tonic and
+     mode the writer chose, separately, and after this script has already
+     built the tonic list in major spelling - so it can show "minor" beside a
+     capital A. The page never builds that pair, and the key it spells,
+     "A minor", is not one the hidden select holds. Setting a select to a
+     value it does not have leaves it with no value at all, and the engine
+     was then asked to read '' as a key. */
+  function reconcileKey() {
+    var mode = modeSelect.value === "minor" ? "minor" : "major";
+    fillTonics(mode, spellTonic(tonicSelect.value, mode));
+    keySelect.value = tonicSelect.value + " " + mode;
+  }
+
+  // what every request to the engine reads; never empty
+  function currentKey() {
+    if (!keySelect.value) reconcileKey();
+    return keySelect.value || "C major";
+  }
+
   /* Changing the mode keeps the same letter where that letter exists in the
      other mode - C major to C minor rather than to A minor - because the
      writer picked the letter and only meant to change the mode. */
   function syncKey() {
-    var chosenKey = tonicSelect.value + " " + modeSelect.value;
-    if (keySelect.value === chosenKey) return;
-    keySelect.value = chosenKey;
+    var mode = modeSelect.value === "minor" ? "minor" : "major";
+    if (tonicSelect.value !== spellTonic(tonicSelect.value, mode)) reconcileKey();
+    var chosenKey = spellTonic(tonicSelect.value, mode) + " " + mode;
+    if (keySelect.value !== chosenKey) {
+      keySelect.value = chosenKey;
+      if (keySelect.value !== chosenKey) reconcileKey();
+    }
+    // announce only a real change of key, however the controls got here
+    if (keySelect.value === lastKey) return;
     keySelect.dispatchEvent(new Event("change"));
   }
 
   fillTonics("major", "C");
   modeSelect.addEventListener("change", function () {
-    var was = tonicSelect.value;
-    var swap = modeSelect.value === "minor" ? was.toLowerCase() : was.toUpperCase();
-    fillTonics(modeSelect.value, swap);
+    fillTonics(modeSelect.value, spellTonic(tonicSelect.value, modeSelect.value));
     syncKey();
   });
   tonicSelect.addEventListener("change", syncKey);
+
+  /* After the browser has had its chance to restore the controls, take what
+     it restored as the key - the progression box is restored too, and a
+     minor progression should come back in its minor key - but in a form the
+     page can actually use. No change event: nothing was changed, only put
+     back, and a change here would try to transpose the melody. */
+  function settleRestoredKey() {
+    reconcileKey();
+    lastKey = keySelect.value;
+  }
+  document.addEventListener("DOMContentLoaded", settleRestoredKey);
+  window.addEventListener("load", settleRestoredKey);
+  window.addEventListener("pageshow", settleRestoredKey);
 
   /* insert buttons for the characters a keyboard hides */
   [["°", "diminished, as in vii°"], ["ø", "half diminished, as in viiø7"],
@@ -3316,7 +3453,7 @@ window.HARMONY_SOURCES = {
      key box a few inches away; the mode is the part the notes do not tell
      you at a glance. */
   function showHeldKey() {
-    var key = document.getElementById("key").value;
+    var key = currentKey();
     document.getElementById("heldKey").textContent =
       keeping ? (key.indexOf("minor") >= 0 ? "minor" : "major") : "";
   }
@@ -3464,7 +3601,7 @@ window.HARMONY_SOURCES = {
        progression with the tune would be handing over an answer that was
        never the tune's to give. */
     function load(item) {
-      document.getElementById("key").value = item.key;
+      keySelect.value = item.key;
       showKey(item.key);
       lastKey = item.key;
       document.getElementById("prog").value = item.soprano ? "" : item.prog;
@@ -3666,7 +3803,7 @@ window.HARMONY_SOURCES = {
       catch (err) { return; }
       if (!dropped || !dropped.prog) return;
 
-      var here = document.getElementById("key").value;
+      var here = currentKey();
       if (isMinorKey(dropped.key) !== isMinorKey(here)) {
         setStatus(dropped.feeling + " is written in " + dropped.key +
                   " and the page is in " + here +
@@ -3727,7 +3864,7 @@ window.HARMONY_SOURCES = {
           message: text,
           /* what the page was doing, which is most of what makes a
              suggestion actionable */
-          context: document.getElementById("key").value + "  " +
+          context: currentKey() + "  " +
                    document.getElementById("prog").value,
           version: document.getElementById("version").textContent,
         }),
@@ -3797,8 +3934,11 @@ window.HARMONY_SOURCES = {
     showHeldKey();          // the held tune is in the new key now
     setBusy(true, "transposing");
     setProgress(null, "transposing");
-    return backend.transpose({ from: from, to: to, soprano: melodyText(),
-                               profile: PROFILE })
+    return painted()
+      .then(function () {
+        return backend.transpose({ from: from, to: to, soprano: melodyText(),
+                                   profile: PROFILE });
+      })
       .then(function (answer) {
         setBusy(false);
         if (answer && answer.ok && answer.soprano) {
